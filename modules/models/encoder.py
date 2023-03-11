@@ -11,9 +11,9 @@ import torch.nn.functional as F
 class STNkd(nn.Module):
     def __init__(self, k=192):
         super(STNkd, self).__init__()
-        self.conv1 = torch.nn.Conv1d(k, 64, 1)
-        self.conv2 = torch.nn.Conv1d(64, 128, 1)
-        self.conv3 = torch.nn.Conv1d(128, 1024, 1)
+        self.conv1 = nn.Conv1d(k, 64, 1)
+        self.conv2 = nn.Conv1d(64, 128, 1)
+        self.conv3 = nn.Conv1d(128, 1024, 1)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k * k)
@@ -109,61 +109,39 @@ class TextureEncoder(nn.Module):
 class PointNetEncoder(nn.Module):
     def __init__(
         self,
-        num_feature=4,
-        zdim=256,      # lantent size
+        in_dim: int = 512,
+        latent_dim=256,    # lantent size
     ):
         super(PointNetEncoder, self).__init__()
 
-        in_channel = num_feature * num_feature * num_feature * 3
-        self.conv1 = nn.Conv1d(in_channel, in_channel, 1)
-        self.bn1 = nn.BatchNorm1d(in_channel)
-        self.conv2 = nn.Conv1d(in_channel, 512, 1)
+        self.stn = STNkd(k=in_dim)
+        self.conv1 = nn.Conv1d(in_dim, in_dim, 1)
+        self.conv2 = nn.Conv1d(in_dim, 512, 1)
+        self.conv3 = nn.Conv1d(512, 1024, 1)
+
+        self.bn1 = nn.BatchNorm1d(in_dim)
         self.bn2 = nn.BatchNorm1d(512)
-        self.conv3 = nn.Conv1d(512, 512, 1)
-        self.bn3 = nn.BatchNorm1d(512)
-        self.conv4 = nn.Conv1d(512, 1024, 1)
-        self.bn4 = nn.BatchNorm1d(1024)
+        self.bn3 = nn.BatchNorm1d(1024)
 
-        # mean
-        self.fc1_mean = nn.Linear(1024, 512)
-        self.fc2_mean = nn.Linear(512, 256)
-        self.fc3_mean = nn.Linear(256, zdim)
-
-        # logvariance
-        self.fc1_logvar = nn.Linear(1024, 512)
-        self.fc2_logvar = nn.Linear(512, 256)
-        self.fc3_logvar = nn.Linear(256, zdim)
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, latent_dim)
 
     def forward(self, x: Tensor):
-
-        # Transform data format
-        B, N, Ts, Ts, Ts, C = x.size()
-        x = x.view(B, N, -1, C)
-        x = x.view(B, N, -1)
-        x = x.permute(0, 2, 1)
+        B = x.size(0)
 
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = self.bn4(self.conv4(x)) # [B, 1024, 1]
+        x = self.bn3(self.conv3(x)) # [B, 1024, 1]
 
         x = torch.max(x, 2, keepdim=True)[0] # [B, 1024, 1]
         x = x.view(-1, 1024)
 
-        mean: Tensor = F.relu(self.fc1_mean(x)) # [B, 1024]
-        mean = F.relu(self.fc2_mean(mean))      # [B, 1024]
-        mean = self.fc3_mean(mean)              # [B, 1024]
+        x: Tensor = F.relu(self.fc1(x)) # [B, 1024]
+        x = F.relu(self.fc2(x))         # [B, 1024]
+        x = self.fc3(x)                 # [B, 1024]
 
-        logvar: Tensor = F.relu(self.fc1_logvar(x)) # [B, 1024]
-        logvar = F.relu(self.fc2_logvar(logvar))    # [B, 1024]
-        logvar = self.fc3_logvar(logvar)            # [B, 1024]
-
-        return mean, logvar
-
-
-class ImageEncoder(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
+        return x
 
 
 # class FrozenClipImageEmbedder(nn.Module):

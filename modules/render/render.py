@@ -88,7 +88,7 @@ class NeuralRenderer(nn.Module):
         >>>                     [  0.         -89.60925293   0.        ]]   # 旋转参数        
         """
 
-        view_scale = 0.5 * 1.3                                   # 超参数： 数值越小 模型越大
+        view_scale = 0.54 * 1.3                                   # 超参数： 数值越小 模型越大
         scale = (self.renderer.viewing_angle / fov) * view_scale # 视角缩放系数，FOV相关
 
         # 距离
@@ -109,7 +109,7 @@ class NeuralRenderer(nn.Module):
         cam_direct = [
             np.cos(pitch) * np.cos(yaw),
             np.cos(pitch) * np.sin(yaw),
-            np.sin(pitch) * 1.2,
+            np.sin(pitch) * 1.25,
         ]
         cam_up = [
             np.cos(np.pi / 2 + pitch) * np.cos(yaw),

@@ -44,13 +44,13 @@ class PointNetEncoder(nn.Module):
         x = torch.max(x, 2, keepdim=True)[0] # [B, 512, 1]
         x = x.view(-1, 512)                  # [B, 512]
 
-        m = F.relu(self.fc_bn1_m(self.fc1_m(x))) # [B, 512]
-        m = F.relu(self.fc_bn2_m(self.fc2_m(m))) # [B, 512]
-        m = self.fc3_m(m)                        # [B, 512]
-        v = F.relu(self.fc_bn1_v(self.fc1_v(x))) # [B, 512]
-        v = F.relu(self.fc_bn2_v(self.fc2_v(v))) # [B, 512]
-        v = self.fc3_v(v)                        # [B, 512]
+        m: Tensor = F.relu(self.fc_bn1_m(self.fc1_m(x))) # [B, 512]
+        m = F.relu(self.fc_bn2_m(self.fc2_m(m)))         # [B, 512]
+        m = self.fc3_m(m)                                # [B, 512]
 
+        v: Tensor = F.relu(self.fc_bn1_v(self.fc1_v(x))) # [B, 512]
+        v = F.relu(self.fc_bn2_v(self.fc2_v(v)))         # [B, 512]
+        v = self.fc3_v(v)                                # [B, 512]
 
         # Returns both mean and logvariance, just ignore the latter in deteministic cases.
         return m, v

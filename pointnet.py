@@ -102,9 +102,7 @@ class PointNetEncoder(nn.Module):
 
     def forward(self, x:torch.Tensor):
         B, D, N = x.size()
-        print('x', x.size())
         trans = self.stn(x)
-        print('trans', trans.size())
         x = x.transpose(2, 1)
         if D > 3:
             feature = x[:, :, 3:]

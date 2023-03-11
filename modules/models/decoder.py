@@ -79,6 +79,20 @@ class PointwiseNet(nn.Module):
             return out
 
 
+class TextureEncoder(nn.Module):
+    def __init__(self, zdim=256) -> None:
+        super().__init__()
+        resnet34 = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
+        self.encoder = ResNet34(1000)
+        self.encoder.load_state_dict(resnet34.state_dict())
+        self.encoder.eval()
+        self.fc = nn.Linear(self.encoder.fc.in_features, zdim)
+
+    def forward(self, x: Tensor):
+        x = self.encoder(x)
+        x = self.fc(x)
+        return x
+    
 class ImageEncoder(nn.Module):
     def __init__(self, zdim=256) -> None:
         super().__init__()
