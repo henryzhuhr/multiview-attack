@@ -4,11 +4,53 @@ import torch.nn.functional as F
 from torchvision import models
 
 import numpy as np
-
+from knn_cuda import KNN
 try:
     from .encoder import PointNetEncoder
+    from .point_mae import (
+        TransformerEncoder,
+    )
 except ImportError as e:
     from encoder import PointNetEncoder
+    from point_mae import (
+        TransformerEncoder,
+        MaskTransformer,
+    )
+
+
+def farthest_point_sample(xyz: np.ndarray, npoint: int):
+    """
+    Input:
+        xyz: pointcloud data, [B, N, 3]
+        npoint: number of samples
+    Return:
+        centroids: sampled pointcloud index, [B, npoint]
+    """
+
+    # xyz = xyz.transpose(0, 2, 1)
+    B, N, C = xyz.shape
+
+    centroids = np.zeros((B, npoint)) # 采样点矩阵（B, npoint）
+    distance = np.ones((B, N)) * 1e10 # 采样点到所有点距离（B, N）
+
+    batch_indices = np.arange(B) # batch_size 数组
+
+    barycenter = np.sum((xyz), 1)            #计算重心坐标 及 距离重心最远的点
+    barycenter = barycenter / xyz.shape[1]
+    barycenter = barycenter.reshape(B, 1, C) #numpy中的reshape相当于torch中的view
+
+    dist = np.sum((xyz - barycenter)**2, -1)
+    farthest = np.argmax(dist, 1) #将距离重心最远的点作为第一个点，这里跟torch.max不一样
+
+    for i in range(npoint):
+        centroids[:, i] = farthest                                  # 更新第i个最远点
+        centroid = xyz[batch_indices, farthest, :].reshape(B, 1, C) # 取出这个最远点的xyz坐标
+        dist = np.sum((xyz - centroid)**2, -1)                      # 计算点集中的所有点到这个最远点的欧式距离，-1消掉了xyz那个维度
+        mask = dist < distance
+        distance[mask] = dist[mask]                                 # 更新distance，记录样本中每个点距离所有已出现的采样点（已采样集合中的点）的最小距离
+        farthest = np.argmax(distance, -1)                          # 返回最远点索引
+
+    return centroids
 
 
 class Encoder2Decoder(nn.Module):
@@ -51,28 +93,80 @@ class SimpleDecoder(nn.Module):
         return x
 
 
+class Group(nn.Module): # FPS + KNN
+    def __init__(self, num_group: int, group_size: int, feature_dim: int = 192):
+        super().__init__()
+        self.num_group = num_group
+        self.group_size = group_size
+        self.feature_dim = feature_dim
+        self.knn = KNN(k=self.group_size, transpose_mode=True)
+
+    def forward(self, xyz: Tensor):
+        '''
+            input: B N 3
+            ---------------------------
+            output: B G M 3
+            center : B G 3
+        '''
+        batch_size, num_points, _ = xyz.shape
+        batch_idx = torch.arange(batch_size, device=xyz.device).unsqueeze(-1)
+        # fps the centers out
+        center_index = torch.from_numpy(farthest_point_sample(
+            xyz.detach().cpu().numpy(),
+            self.num_group,
+        )).type(torch.long)                                    # [B, G]
+
+        center = xyz[batch_idx, center_index, :] # [B, G, 3]
+
+        # knn to get the neighborhood
+        _, idx = self.knn(xyz, center)    # B G M
+        assert idx.size(1) == self.num_group
+        assert idx.size(2) == self.group_size
+        idx_base = torch.arange(0, batch_size, device=xyz.device).view(-1, 1, 1) * num_points
+        idx = idx + idx_base
+        idx = idx.view(-1)
+        neighborhood = xyz.view(batch_size * num_points, -1)[idx, :]
+        neighborhood = neighborhood.view(
+            batch_size,
+            self.num_group,
+            self.group_size,
+            self.feature_dim,
+        ).contiguous()
+
+        # normalize
+        neighborhood = neighborhood - center.unsqueeze(2)
+        return neighborhood, center
+
+
 class MAE(nn.Module):
     def __init__(
         self,
         texture_size: int = 4,
         num_points: int = 12306,
+        num_groups: int = 800,    # divide all points to group
+        group_size: int = 20,
         mask_ratio: float = 0.75,
     ):
         super().__init__()
         assert 0. < mask_ratio < 1., f'mask ratio must be kept between 0 and 1, got: {mask_ratio}'
+
         self.ts = texture_size
         self.mask_ratio = mask_ratio
         self.num_points = num_points
+        self.num_groups = num_groups
+        self.group_size = group_size
         self.num_visible = int((1 - self.mask_ratio) * num_points) # Divide into masked & un-masked groups
         self.num_masked = num_points - self.num_visible
 
-        num_feature = (texture_size**3) * 3
+        feature_dim = (texture_size**3) * 3
 
         latent_dim = 512
         self.textuer_embed = nn.Linear(
             self.ts * self.ts * self.ts * 3,
             latent_dim,
         )
+
+        self.point_group = Group(self.num_groups, self.group_size, feature_dim)
 
         # Add 1 for cls_token
         self.pos_embed = nn.Parameter(torch.randn(1, self.num_points + 1, latent_dim))
@@ -88,22 +182,31 @@ class MAE(nn.Module):
         self.decoder_pos_embed = nn.Embedding(num_patches_plus_cls_token - 1, latent_dim)
 
         self.encoder = PointNetEncoder(self.num_visible, latent_dim=latent_dim)
+        self.MAE_encoder = MaskTransformer(config)
 
         # Encoder-Decoder：Encoder 输出的维度可能和 Decoder 要求的输入维度不一致，因此需要转换
         self.encoder2decoer = Encoder2Decoder(num_points=self.num_visible, latent_dim=latent_dim)
 
-        self.decoder = SimpleDecoder(latent_dim=latent_dim, out_dim=num_feature)
+        self.decoder = SimpleDecoder(latent_dim=latent_dim, out_dim=feature_dim)
 
-        self.head = nn.Linear(num_feature, num_feature)
+        self.head = nn.Linear(feature_dim, feature_dim)
 
         print("Init MAE")
 
     def forward(self, x: Tensor):
+        input_x = x
         device = x.device
         B, N, Ts, Ts, Ts, C = x.size()
         assert self.ts == Ts
-        Tsn = Ts * Ts * Ts # Tsn: texture size new
-        x = x.view(B, N, -1)
+        x = x.view(B, N, -1, C).view(B, N, -1)
+        print(x.size())
+
+        num_points_each_group = self.num_points // self.num_groups
+
+        # centroids = farthest_point_sample(x.detach().cpu().numpy(), self.num_groups)
+        neighborhood, center = self.point_group.forward(x)
+        print("neighborhood ", neighborhood.size())
+        print("center       ", center.size())
 
         # -- Shuffle --
         shuffle_indices = torch.rand(B, N).to(device).argsort() # (b, n_x)
@@ -138,15 +241,16 @@ class MAE(nn.Module):
 
         # -- Mask pixel Prediction --
         decoder_mask_tokens = decoded_tokens[batch_idx, mask_idx, :]
-        pred_masked_values = self.head(decoder_mask_tokens)
+
+        pred_masked_values = self.head.forward(decoder_mask_tokens)
 
         recons_x = x.detach()
         recons_x[batch_idx, mask_idx] = pred_masked_values
-        recons_x = recons_x.view(B, N, Ts, Ts, Ts, C)
+        recons_x = recons_x.view(B, N, -1, C).view(B, N, Ts, Ts, Ts, C)
 
         # 比较下预测值和真实值
         mse_per_patch = (pred_masked_values - mask_x).abs().mean(dim=-1)
-        loss:Tensor = mse_per_patch.mean()
+        loss = mse_per_patch.mean()
 
         return (
             recons_x,
@@ -161,4 +265,4 @@ if __name__ == '__main__':
     B = 1
     x = torch.randn([B, 12306, 4, 4, 4, 3]).to(device)
 
-    recons_x,loss = model.forward(x)
+    recons_x, loss = model.forward(x)
