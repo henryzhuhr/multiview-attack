@@ -79,6 +79,11 @@ def render_image():
     model.to(args.device)
     optimizer = optim.SGD(model.parameters(), lr=0.01)
     model.train()
+    model.forward(torch.stack([
+        neural_renderer.textures.squeeze(0),
+        neural_renderer.textures.squeeze(0),
+    ]).to(args.device))
+    return
     for i in range(1000):
 
         x = neural_renderer.textures

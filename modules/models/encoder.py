@@ -17,20 +17,20 @@ class STNkd(nn.Module):
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k * k)
-        self.relu = nn.ReLU()
+        self.act = nn.LeakyReLU()
 
         self.k = k
 
     def forward(self, x: Tensor):
         B = x.size(0)
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        x = self.act(self.conv1(x))
+        x = self.act(self.conv2(x))
+        x = self.act(self.conv3(x))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = self.act(self.fc1(x))
+        x = self.act(self.fc2(x))
         x = self.fc3(x)
 
         iden = torch.from_numpy(np.eye(self.k).flatten().astype(np.float32)).view(1, self.k * self.k).repeat(B, 1)
@@ -43,37 +43,31 @@ class STNkd(nn.Module):
 class TextureEncoder(nn.Module):
     def __init__(
         self,
-        texture_size=4,
-        zdim=256,       # lantent size
+        num_feature=4,
+        zdim=256,      # lantent size
     ):
         super(TextureEncoder, self).__init__()
-        num_feature = texture_size
+        num_feature = num_feature
 
         self.stn_kd = STNkd(num_feature * num_feature * num_feature * 3)
 
         in_channel = num_feature * num_feature * num_feature * 3
         self.conv1 = nn.Conv1d(in_channel, in_channel, 1)
-        self.bn1 = nn.BatchNorm1d(in_channel)
         self.conv2 = nn.Conv1d(in_channel, 512, 1)
-        self.bn2 = nn.BatchNorm1d(512)
         self.conv3 = nn.Conv1d(512, 512, 1)
-        self.bn3 = nn.BatchNorm1d(512)
         self.conv4 = nn.Conv1d(512, 1024, 1)
-        self.bn4 = nn.BatchNorm1d(1024)
 
         # mean
         self.fc1_mean = nn.Linear(1024, 512)
-        self.fc_bn1_m = nn.BatchNorm1d(512)
         self.fc2_mean = nn.Linear(512, 256)
-        self.fc_bn2_m = nn.BatchNorm1d(256)
         self.fc3_mean = nn.Linear(256, zdim)
 
         # logvariance
         self.fc1_logvar = nn.Linear(1024, 512)
-        self.fc_bn1_var = nn.BatchNorm1d(512)
         self.fc2_logvar = nn.Linear(512, 256)
-        self.fc_bn2_var = nn.BatchNorm1d(256)
         self.fc3_logvar = nn.Linear(256, zdim)
+
+        self.act=nn.GELU()
 
     def forward(self, x: Tensor):
 
@@ -87,21 +81,21 @@ class TextureEncoder(nn.Module):
 
         x = torch.bmm(trans, x)
 
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = self.bn4(self.conv4(x)) # [B, 1024, 1]
+        x = self.act(self.conv1(x))
+        x = self.act(self.conv2(x))
+        x = self.act(self.conv3(x))
+        x = self.conv4(x) # [B, 1024, 1]
 
         x = torch.max(x, 2, keepdim=True)[0] # [B, 1024, 1]
         x = x.view(-1, 1024)
 
-        mean: Tensor = F.relu(self.fc_bn1_m(self.fc1_mean(x))) # [B, 1024]
-        mean = F.relu(self.fc_bn2_m(self.fc2_mean(mean)))      # [B, 1024]
-        mean = self.fc3_mean(mean)                             # [B, 1024]
+        mean: Tensor = self.act(self.fc1_mean(x)) # [B, 1024]
+        mean = self.act(self.fc2_mean(mean))      # [B, 1024]
+        mean = self.fc3_mean(mean)             # [B, 1024]
 
-        logvar: Tensor = F.relu(self.fc_bn1_var(self.fc1_logvar(x))) # [B, 1024]
-        logvar = F.relu(self.fc_bn2_var(self.fc2_logvar(logvar)))    # [B, 1024]
-        logvar = self.fc3_logvar(logvar)                             # [B, 1024]
+        logvar: Tensor = self.act(self.fc1_logvar(x)) # [B, 1024]
+        logvar = self.act(self.fc2_logvar(logvar))    # [B, 1024]
+        logvar = self.fc3_logvar(logvar)            # [B, 1024]
 
         return mean, logvar
 
@@ -130,52 +124,19 @@ class PointNetEncoder(nn.Module):
     def forward(self, x: Tensor):
         B = x.size(0)
 
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.act(self.bn2(self.conv2(x)))
         x = self.bn3(self.conv3(x)) # [B, 1024, 1]
 
         x = torch.max(x, 2, keepdim=True)[0] # [B, 1024, 1]
         x = x.view(-1, 1024)
 
-        x: Tensor = F.relu(self.fc1(x)) # [B, 1024]
-        x = F.relu(self.fc2(x))         # [B, 1024]
+        x: Tensor = self.act(self.fc1(x)) # [B, 1024]
+        x = self.act(self.fc2(x))         # [B, 1024]
         x = self.fc3(x)                 # [B, 1024]
 
         return x
 
-
-# class FrozenClipImageEmbedder(nn.Module):
-#     """
-#         Uses the CLIP image encoder.
-#         """
-#     def __init__(
-#             self,
-#             model,
-#             jit=False,
-#             device='cuda' if torch.cuda.is_available() else 'cpu',
-#             antialias=False,
-#         ):
-#         super().__init__()
-#         self.model, _ = clip.load(name=model, device=device, jit=jit)
-
-#         self.antialias = antialias
-
-#         self.register_buffer('mean', torch.Tensor([0.48145466, 0.4578275, 0.40821073]), persistent=False)
-#         self.register_buffer('std', torch.Tensor([0.26862954, 0.26130258, 0.27577711]), persistent=False)
-
-#     def preprocess(self, x):
-#         # normalize to [0,1]
-#         x = kornia.geometry.resize(x, (224, 224),
-#                                    interpolation='bicubic',align_corners=True,
-#                                    antialias=self.antialias)
-#         x = (x + 1.) / 2.
-#         # renormalize according to clip
-#         x = kornia.enhance.normalize(x, self.mean, self.std)
-#         return x
-
-#     def forward(self, x):
-#         # x is assumed to be in range [-1,1]
-#         return self.model.encode_image(self.preprocess(x))
 
 if __name__ == '__main__':
 
@@ -192,7 +153,7 @@ if __name__ == '__main__':
         color_channel,
     )
 
-    pointfeat = PointNetEncoder(num_feature=texture_size)
+    pointfeat = PointNetEncoder(num_feature=texture_size, zdim=256)
 
     mean, logvar = pointfeat.forward(x)
     print('mean', mean.size())

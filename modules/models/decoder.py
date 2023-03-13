@@ -4,8 +4,6 @@ import torch.nn.functional as F
 from torchvision import models
 import numpy as np
 
-from modules.models.resnet import ResNet34
-
 
 class ConcatSquashLinear(nn.Module):
     """
@@ -19,7 +17,7 @@ class ConcatSquashLinear(nn.Module):
         self._layer = nn.Linear(dim_in, dim_out)
 
     def forward(self, ctx, x):
-        gate = torch.sigmoid(self._hyper_gate(ctx))
+        gate = F.sigmoid(self._hyper_gate(ctx))
         bias = self._hyper_bias(ctx)
         # if x.dim() == 3:
         #     gate = gate.unsqueeze(1)
@@ -31,7 +29,7 @@ class ConcatSquashLinear(nn.Module):
 class PointwiseNet(nn.Module):
     def __init__(self, out_dim, zdim, residual=True):
         super().__init__()
-        self.act = F.leaky_relu
+        self.act = nn.GELU()
         self.residual = residual
 
         # self.time_embed = nn.Sequential(
@@ -79,30 +77,56 @@ class PointwiseNet(nn.Module):
             return out
 
 
-class TextureEncoder(nn.Module):
-    def __init__(self, zdim=256) -> None:
+class SimpleDecoder(nn.Module):
+    def __init__(
+        self,
+        latent_dim: int = 256,
+        num_points: int = 12306,
+        texture_size: int = 4,
+    ):
         super().__init__()
-        resnet34 = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
-        self.encoder = ResNet34(1000)
-        self.encoder.load_state_dict(resnet34.state_dict())
-        self.encoder.eval()
-        self.fc = nn.Linear(self.encoder.fc.in_features, zdim)
+        self.latent_dim = latent_dim
+        self.texture_size = texture_size
+        self.num_points = num_points
+        self.out_dim = (texture_size**3) * 3
 
-    def forward(self, x: Tensor):
-        x = self.encoder(x)
-        x = self.fc(x)
-        return x
-    
-class ImageEncoder(nn.Module):
-    def __init__(self, zdim=256) -> None:
-        super().__init__()
-        resnet34 = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
-        self.encoder = ResNet34(1000)
-        self.encoder.load_state_dict(resnet34.state_dict())
-        self.encoder.eval()
-        self.fc = nn.Linear(self.encoder.fc.in_features, zdim)
+        
 
-    def forward(self, x: Tensor):
-        x = self.encoder(x)
-        x = self.fc(x)
+        self.conv1 = nn.Conv1d(latent_dim, 512, 1)
+        self.conv2 = nn.Conv1d(512, 1024, 1)
+        self.conv3 = nn.Conv1d(1024, 512, 1)
+        self.conv4 = nn.Conv1d(512, self.out_dim, 1)
+
+        self.fc1 = nn.Linear(latent_dim, 512)
+        self.fc2 = nn.Linear(512, 512)
+        self.fc3 = nn.Linear(512, self.out_dim)
+        self.act = nn.GELU()
+
+    def forward(self, latent_x: Tensor):
+        B = latent_x.size(0)
+        ts = self.texture_size
+        x = latent_x
+        x = x.repeat(1, self.num_points, 1).permute(0, 2, 1)
+
+        x = self.act.forward(self.conv1.forward(x))
+        x = self.act.forward(self.conv2.forward(x))
+        x = self.act.forward(self.conv3.forward(x))
+        x = F.sigmoid(self.conv4.forward(x))
+
+        x = x.view(B, self.num_points, (ts * ts * ts), 3)
+        x = x.view(B, self.num_points, ts, ts, ts, 3)
         return x
+
+
+if __name__ == '__main__':
+
+    latent_x = torch.rand([1, 256]).cuda()
+
+    model = SimpleDecoder(
+        latent_dim=256,
+        num_points=12306,
+        texture_size=4,
+    )
+    model.cuda()
+    model.train()
+    x = model.forward(latent_x)
