@@ -1,0 +1,10 @@
+texture:
+  texture_size: 4
+  num_points: 12306
+
+model:
+  latent_dim: 512
+
+train:
+  lr: 1e-1
+  milestones: [10000,20000]

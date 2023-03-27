@@ -1,0 +1,9 @@
+coco_root: data/coco
+train_annotation_file: instances_train2017.json
+val_annotation_file: instances_val2017.json
+categories:
+  - person
+  - bicycle
+  - car
+  - motorcycle
+  - airplane
