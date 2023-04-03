@@ -1,0 +1,3543 @@
+{
+    "categories": [
+        "car",
+        "person",
+        "bicycle",
+        "motorcycle",
+        "airplane"
+    ],
+    "coco_root": "data/coco",
+    "object_list": [
+        {
+            "file_name": "000000188465.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                218
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000376900.jpg",
+            "bbox": [
+                1,
+                270,
+                478,
+                200
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000122962.jpg",
+            "bbox": [
+                1,
+                1,
+                638,
+                372
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000114907.jpg",
+            "bbox": [
+                0,
+                153,
+                639,
+                271
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000057597.jpg",
+            "bbox": [
+                21,
+                85,
+                615,
+                82
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000065798.jpg",
+            "bbox": [
+                0,
+                32,
+                639,
+                261
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000336232.jpg",
+            "bbox": [
+                98,
+                1,
+                541,
+                292
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000074092.jpg",
+            "bbox": [
+                5,
+                162,
+                138,
+                101
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000156071.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                462
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000541123.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                261
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000303566.jpg",
+            "bbox": [
+                94,
+                56,
+                489,
+                189
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000229849.jpg",
+            "bbox": [
+                1,
+                0,
+                425,
+                430
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000098853.jpg",
+            "bbox": [
+                0,
+                0,
+                426,
+                179
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000524850.jpg",
+            "bbox": [
+                122,
+                46,
+                317,
+                175
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000049759.jpg",
+            "bbox": [
+                45,
+                167,
+                519,
+                65
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000303713.jpg",
+            "bbox": [
+                0,
+                42,
+                426,
+                430
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000279278.jpg",
+            "bbox": [
+                15,
+                5,
+                113,
+                152
+            ],
+            "category_id": 2,
+            "category_name": "bicycle"
+        },
+        {
+            "file_name": "000000328430.jpg",
+            "bbox": [
+                295,
+                31,
+                78,
+                366
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000500478.jpg",
+            "bbox": [
+                216,
+                50,
+                112,
+                190
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000336658.jpg",
+            "bbox": [
+                114,
+                248,
+                452,
+                30
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000099114.jpg",
+            "bbox": [
+                184,
+                147,
+                241,
+                71
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000254814.jpg",
+            "bbox": [
+                25,
+                23,
+                600,
+                345
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000377723.jpg",
+            "bbox": [
+                215,
+                225,
+                140,
+                38
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000410496.jpg",
+            "bbox": [
+                15,
+                0,
+                408,
+                196
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000345027.jpg",
+            "bbox": [
+                462,
+                267,
+                130,
+                29
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000484351.jpg",
+            "bbox": [
+                1,
+                9,
+                638,
+                237
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000173057.jpg",
+            "bbox": [
+                21,
+                452,
+                219,
+                52
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000148508.jpg",
+            "bbox": [
+                3,
+                163,
+                636,
+                261
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000410650.jpg",
+            "bbox": [
+                5,
+                0,
+                634,
+                178
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000558114.jpg",
+            "bbox": [
+                1,
+                6,
+                638,
+                272
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000509014.jpg",
+            "bbox": [
+                85,
+                133,
+                501,
+                67
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000402615.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                187
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000427256.jpg",
+            "bbox": [
+                21,
+                0,
+                618,
+                311
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000361730.jpg",
+            "bbox": [
+                7,
+                370,
+                493,
+                72
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000304404.jpg",
+            "bbox": [
+                0,
+                8,
+                604,
+                243
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000181542.jpg",
+            "bbox": [
+                0,
+                93,
+                613,
+                155
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000189775.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                269
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000460147.jpg",
+            "bbox": [
+                1,
+                119,
+                638,
+                244
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000279927.jpg",
+            "bbox": [
+                1,
+                26,
+                638,
+                354
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000542127.jpg",
+            "bbox": [
+                101,
+                333,
+                344,
+                51
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000361919.jpg",
+            "bbox": [
+                22,
+                304,
+                498,
+                112
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000148999.jpg",
+            "bbox": [
+                315,
+                329,
+                224,
+                28
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000214539.jpg",
+            "bbox": [
+                1,
+                55,
+                569,
+                239
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000017959.jpg",
+            "bbox": [
+                0,
+                132,
+                639,
+                239
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000476770.jpg",
+            "bbox": [
+                1,
+                1,
+                638,
+                165
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000329323.jpg",
+            "bbox": [
+                0,
+                18,
+                424,
+                341
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000059044.jpg",
+            "bbox": [
+                301,
+                62,
+                241,
+                149
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000272148.jpg",
+            "bbox": [
+                140,
+                141,
+                483,
+                49
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000165681.jpg",
+            "bbox": [
+                1,
+                40,
+                517,
+                91
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000165681.jpg",
+            "bbox": [
+                20,
+                112,
+                619,
+                331
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000378673.jpg",
+            "bbox": [
+                14,
+                146,
+                605,
+                80
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000370486.jpg",
+            "bbox": [
+                1,
+                0,
+                404,
+                499
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000411530.jpg",
+            "bbox": [
+                400,
+                291,
+                209,
+                183
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000255917.jpg",
+            "bbox": [
+                59,
+                253,
+                252,
+                84
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000288685.jpg",
+            "bbox": [
+                1,
+                71,
+                638,
+                245
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000018380.jpg",
+            "bbox": [
+                264,
+                24,
+                288,
+                244
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000108503.jpg",
+            "bbox": [
+                7,
+                204,
+                577,
+                65
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000427997.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                405
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000084031.jpg",
+            "bbox": [
+                79,
+                41,
+                214,
+                229
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000231508.jpg",
+            "bbox": [
+                1,
+                83,
+                333,
+                212
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000133244.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                116
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000256192.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                355
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000190676.jpg",
+            "bbox": [
+                100,
+                88,
+                484,
+                95
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000059635.jpg",
+            "bbox": [
+                2,
+                10,
+                479,
+                438
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000559348.jpg",
+            "bbox": [
+                112,
+                122,
+                477,
+                82
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000002299.jpg",
+            "bbox": [
+                0,
+                18,
+                499,
+                263
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000338219.jpg",
+            "bbox": [
+                3,
+                150,
+                425,
+                50
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000084270.jpg",
+            "bbox": [
+                1,
+                4,
+                602,
+                378
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000493905.jpg",
+            "bbox": [
+                116,
+                0,
+                413,
+                172
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000141671.jpg",
+            "bbox": [
+                1,
+                175,
+                437,
+                159
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000100723.jpg",
+            "bbox": [
+                4,
+                1,
+                495,
+                331
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000338304.jpg",
+            "bbox": [
+                0,
+                89,
+                387,
+                502
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000190923.jpg",
+            "bbox": [
+                58,
+                236,
+                175,
+                70
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000199236.jpg",
+            "bbox": [
+                1,
+                170,
+                569,
+                53
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000125572.jpg",
+            "bbox": [
+                21,
+                333,
+                520,
+                40
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000182923.jpg",
+            "bbox": [
+                1,
+                0,
+                373,
+                249
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000019109.jpg",
+            "bbox": [
+                216,
+                234,
+                366,
+                116
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000076468.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                350
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000363188.jpg",
+            "bbox": [
+                0,
+                129,
+                305,
+                115
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000486104.jpg",
+            "bbox": [
+                1,
+                14,
+                497,
+                181
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000559842.jpg",
+            "bbox": [
+                0,
+                86,
+                639,
+                221
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000117492.jpg",
+            "bbox": [
+                1,
+                132,
+                632,
+                156
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000133969.jpg",
+            "bbox": [
+                57,
+                111,
+                385,
+                208
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000158548.jpg",
+            "bbox": [
+                489,
+                174,
+                150,
+                37
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000166747.jpg",
+            "bbox": [
+                126,
+                109,
+                164,
+                155
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000551820.jpg",
+            "bbox": [
+                0,
+                222,
+                618,
+                101
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000142238.jpg",
+            "bbox": [
+                75,
+                111,
+                516,
+                261
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000207844.jpg",
+            "bbox": [
+                36,
+                227,
+                590,
+                181
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000142324.jpg",
+            "bbox": [
+                150,
+                179,
+                399,
+                163
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000183391.jpg",
+            "bbox": [
+                0,
+                0,
+                631,
+                380
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000134322.jpg",
+            "bbox": [
+                1,
+                275,
+                632,
+                132
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000126137.jpg",
+            "bbox": [
+                1,
+                0,
+                543,
+                121
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000421060.jpg",
+            "bbox": [
+                306,
+                5,
+                329,
+                228
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000412894.jpg",
+            "bbox": [
+                0,
+                400,
+                426,
+                239
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000191845.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                360
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000282037.jpg",
+            "bbox": [
+                56,
+                11,
+                583,
+                154
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000290248.jpg",
+            "bbox": [
+                0,
+                269,
+                639,
+                188
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000060886.jpg",
+            "bbox": [
+                50,
+                0,
+                404,
+                241
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000208363.jpg",
+            "bbox": [
+                0,
+                114,
+                433,
+                365
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000331280.jpg",
+            "bbox": [
+                204,
+                2,
+                264,
+                97
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000224807.jpg",
+            "bbox": [
+                0,
+                19,
+                639,
+                150
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000036494.jpg",
+            "bbox": [
+                85,
+                220,
+                526,
+                164
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000478862.jpg",
+            "bbox": [
+                59,
+                290,
+                415,
+                63
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000077460.jpg",
+            "bbox": [
+                0,
+                532,
+                427,
+                70
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000085682.jpg",
+            "bbox": [
+                107,
+                203,
+                465,
+                191
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000282298.jpg",
+            "bbox": [
+                1,
+                253,
+                638,
+                226
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000143068.jpg",
+            "bbox": [
+                1,
+                126,
+                630,
+                49
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000388846.jpg",
+            "bbox": [
+                0,
+                213,
+                626,
+                146
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000012120.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                289
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000094157.jpg",
+            "bbox": [
+                46,
+                602,
+                166,
+                24
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000397303.jpg",
+            "bbox": [
+                136,
+                98,
+                228,
+                71
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000430073.jpg",
+            "bbox": [
+                140,
+                119,
+                132,
+                62
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000184324.jpg",
+            "bbox": [
+                3,
+                199,
+                594,
+                225
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000356387.jpg",
+            "bbox": [
+                63,
+                191,
+                286,
+                56
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000504000.jpg",
+            "bbox": [
+                502,
+                119,
+                107,
+                69
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000217285.jpg",
+            "bbox": [
+                1,
+                1,
+                638,
+                267
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000143572.jpg",
+            "bbox": [
+                55,
+                146,
+                535,
+                232
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000184611.jpg",
+            "bbox": [
+                64,
+                109,
+                575,
+                323
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000209222.jpg",
+            "bbox": [
+                164,
+                95,
+                321,
+                90
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000364884.jpg",
+            "bbox": [
+                0,
+                0,
+                499,
+                353
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000012639.jpg",
+            "bbox": [
+                22,
+                144,
+                287,
+                83
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000012670.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                427
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000250282.jpg",
+            "bbox": [
+                0,
+                34,
+                639,
+                388
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000520659.jpg",
+            "bbox": [
+                113,
+                49,
+                526,
+                340
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000520707.jpg",
+            "bbox": [
+                235,
+                142,
+                277,
+                41
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000299553.jpg",
+            "bbox": [
+                1,
+                0,
+                373,
+                499
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000332351.jpg",
+            "bbox": [
+                24,
+                167,
+                258,
+                11
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000143961.jpg",
+            "bbox": [
+                1,
+                0,
+                576,
+                355
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000373353.jpg",
+            "bbox": [
+                0,
+                206,
+                483,
+                195
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000373382.jpg",
+            "bbox": [
+                214,
+                0,
+                265,
+                360
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000266892.jpg",
+            "bbox": [
+                0,
+                86,
+                639,
+                303
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000193181.jpg",
+            "bbox": [
+                1,
+                0,
+                424,
+                163
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000438955.jpg",
+            "bbox": [
+                66,
+                90,
+                468,
+                85
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000463542.jpg",
+            "bbox": [
+                11,
+                0,
+                628,
+                158
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000201418.jpg",
+            "bbox": [
+                43,
+                136,
+                426,
+                37
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000078565.jpg",
+            "bbox": [
+                96,
+                222,
+                525,
+                64
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000266981.jpg",
+            "bbox": [
+                64,
+                394,
+                343,
+                43
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000561958.jpg",
+            "bbox": [
+                1,
+                164,
+                638,
+                106
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000037689.jpg",
+            "bbox": [
+                0,
+                5,
+                581,
+                296
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000463730.jpg",
+            "bbox": [
+                1,
+                116,
+                602,
+                151
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000005001.jpg",
+            "bbox": [
+                523,
+                26,
+                116,
+                288
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000439180.jpg",
+            "bbox": [
+                272,
+                142,
+                367,
+                177
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000078748.jpg",
+            "bbox": [
+                0,
+                19,
+                639,
+                190
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000455624.jpg",
+            "bbox": [
+                37,
+                147,
+                185,
+                147
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000414673.jpg",
+            "bbox": [
+                60,
+                0,
+                439,
+                331
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000087038.jpg",
+            "bbox": [
+                1,
+                190,
+                638,
+                101
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000521259.jpg",
+            "bbox": [
+                0,
+                126,
+                630,
+                104
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000406611.jpg",
+            "bbox": [
+                31,
+                242,
+                473,
+                161
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000283785.jpg",
+            "bbox": [
+                50,
+                146,
+                449,
+                165
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000169169.jpg",
+            "bbox": [
+                83,
+                165,
+                556,
+                292
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000570688.jpg",
+            "bbox": [
+                4,
+                187,
+                631,
+                265
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000210273.jpg",
+            "bbox": [
+                91,
+                61,
+                548,
+                261
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000570756.jpg",
+            "bbox": [
+                0,
+                268,
+                562,
+                42
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000390555.jpg",
+            "bbox": [
+                38,
+                19,
+                597,
+                414
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000325031.jpg",
+            "bbox": [
+                0,
+                161,
+                631,
+                32
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000005586.jpg",
+            "bbox": [
+                0,
+                0,
+                319,
+                239
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000210394.jpg",
+            "bbox": [
+                47,
+                175,
+                592,
+                132
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000226802.jpg",
+            "bbox": [
+                185,
+                181,
+                419,
+                42
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000259571.jpg",
+            "bbox": [
+                62,
+                55,
+                307,
+                88
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000136715.jpg",
+            "bbox": [
+                27,
+                18,
+                568,
+                142
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000259597.jpg",
+            "bbox": [
+                0,
+                32,
+                579,
+                205
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000259690.jpg",
+            "bbox": [
+                27,
+                98,
+                225,
+                114
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000095862.jpg",
+            "bbox": [
+                0,
+                32,
+                457,
+                325
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000145020.jpg",
+            "bbox": [
+                27,
+                201,
+                209,
+                68
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000562818.jpg",
+            "bbox": [
+                353,
+                229,
+                180,
+                39
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000054967.jpg",
+            "bbox": [
+                0,
+                421,
+                192,
+                52
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000439994.jpg",
+            "bbox": [
+                0,
+                0,
+                427,
+                458
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000448263.jpg",
+            "bbox": [
+                1,
+                0,
+                276,
+                122
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000374545.jpg",
+            "bbox": [
+                12,
+                524,
+                381,
+                33
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000284445.jpg",
+            "bbox": [
+                112,
+                322,
+                335,
+                94
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000350023.jpg",
+            "bbox": [
+                112,
+                289,
+                246,
+                190
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000350122.jpg",
+            "bbox": [
+                236,
+                209,
+                403,
+                163
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000546823.jpg",
+            "bbox": [
+                5,
+                247,
+                634,
+                81
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000153669.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                335
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000227399.jpg",
+            "bbox": [
+                124,
+                174,
+                352,
+                113
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000079969.jpg",
+            "bbox": [
+                1,
+                0,
+                424,
+                389
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000014439.jpg",
+            "bbox": [
+                155,
+                7,
+                447,
+                170
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000481390.jpg",
+            "bbox": [
+                0,
+                0,
+                626,
+                183
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000219271.jpg",
+            "bbox": [
+                83,
+                46,
+                266,
+                453
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000293200.jpg",
+            "bbox": [
+                71,
+                84,
+                550,
+                120
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000489842.jpg",
+            "bbox": [
+                19,
+                5,
+                601,
+                527
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000154004.jpg",
+            "bbox": [
+                1,
+                50,
+                445,
+                288
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000121242.jpg",
+            "bbox": [
+                1,
+                182,
+                615,
+                21
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000563648.jpg",
+            "bbox": [
+                1,
+                311,
+                322,
+                328
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000039405.jpg",
+            "bbox": [
+                1,
+                0,
+                632,
+                445
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000277005.jpg",
+            "bbox": [
+                107,
+                252,
+                300,
+                78
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000326248.jpg",
+            "bbox": [
+                168,
+                60,
+                314,
+                314
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000236426.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                247
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000474028.jpg",
+            "bbox": [
+                1,
+                213,
+                587,
+                35
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000261097.jpg",
+            "bbox": [
+                0,
+                0,
+                332,
+                499
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000072795.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                479
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000203931.jpg",
+            "bbox": [
+                0,
+                0,
+                427,
+                451
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000572620.jpg",
+            "bbox": [
+                7,
+                131,
+                611,
+                224
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000441553.jpg",
+            "bbox": [
+                276,
+                224,
+                297,
+                160
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000163057.jpg",
+            "bbox": [
+                5,
+                257,
+                634,
+                70
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000179487.jpg",
+            "bbox": [
+                0,
+                159,
+                41,
+                105
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000376112.jpg",
+            "bbox": [
+                123,
+                108,
+                245,
+                381
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000007511.jpg",
+            "bbox": [
+                337,
+                272,
+                267,
+                28
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000433515.jpg",
+            "bbox": [
+                102,
+                287,
+                523,
+                57
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000138639.jpg",
+            "bbox": [
+                0,
+                252,
+                631,
+                107
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000204186.jpg",
+            "bbox": [
+                0,
+                37,
+                639,
+                88
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000105912.jpg",
+            "bbox": [
+                228,
+                147,
+                203,
+                33
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000490936.jpg",
+            "bbox": [
+                112,
+                92,
+                332,
+                404
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000024021.jpg",
+            "bbox": [
+                1,
+                39,
+                638,
+                327
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000163314.jpg",
+            "bbox": [
+                163,
+                225,
+                310,
+                74
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000376322.jpg",
+            "bbox": [
+                1,
+                169,
+                417,
+                152
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000343561.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                228
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000458325.jpg",
+            "bbox": [
+                163,
+                171,
+                196,
+                77
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000097988.jpg",
+            "bbox": [
+                1,
+                227,
+                599,
+                221
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000540414.jpg",
+            "bbox": [
+                48,
+                186,
+                564,
+                202
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000065288.jpg",
+            "bbox": [
+                99,
+                37,
+                514,
+                142
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000057150.jpg",
+            "bbox": [
+                40,
+                1,
+                151,
+                32
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000212800.jpg",
+            "bbox": [
+                51,
+                153,
+                361,
+                97
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000139099.jpg",
+            "bbox": [
+                137,
+                85,
+                502,
+                118
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000016228.jpg",
+            "bbox": [
+                13,
+                166,
+                616,
+                127
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000065455.jpg",
+            "bbox": [
+                313,
+                73,
+                186,
+                300
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000184324.jpg",
+            "bbox": [
+                3,
+                199,
+                594,
+                225
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000546823.jpg",
+            "bbox": [
+                5,
+                247,
+                634,
+                81
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000343561.jpg",
+            "bbox": [
+                1,
+                0,
+                638,
+                228
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000277005.jpg",
+            "bbox": [
+                107,
+                252,
+                300,
+                78
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000356387.jpg",
+            "bbox": [
+                63,
+                191,
+                286,
+                56
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000227399.jpg",
+            "bbox": [
+                124,
+                174,
+                352,
+                113
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000228436.jpg",
+            "bbox": [
+                263,
+                125,
+                292,
+                45
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000125572.jpg",
+            "bbox": [
+                21,
+                333,
+                520,
+                40
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000097988.jpg",
+            "bbox": [
+                1,
+                227,
+                599,
+                221
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000279278.jpg",
+            "bbox": [
+                15,
+                5,
+                113,
+                152
+            ],
+            "category_id": 2,
+            "category_name": "bicycle"
+        },
+        {
+            "file_name": "000000059635.jpg",
+            "bbox": [
+                2,
+                10,
+                479,
+                438
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000065288.jpg",
+            "bbox": [
+                99,
+                37,
+                514,
+                142
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000374545.jpg",
+            "bbox": [
+                12,
+                524,
+                381,
+                33
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000184611.jpg",
+            "bbox": [
+                64,
+                109,
+                575,
+                323
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000099114.jpg",
+            "bbox": [
+                184,
+                147,
+                241,
+                71
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000350023.jpg",
+            "bbox": [
+                112,
+                289,
+                246,
+                190
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000139099.jpg",
+            "bbox": [
+                137,
+                85,
+                502,
+                118
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000254814.jpg",
+            "bbox": [
+                25,
+                23,
+                600,
+                345
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000210273.jpg",
+            "bbox": [
+                91,
+                61,
+                548,
+                261
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000005001.jpg",
+            "bbox": [
+                523,
+                26,
+                116,
+                288
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000138639.jpg",
+            "bbox": [
+                0,
+                252,
+                631,
+                107
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000350122.jpg",
+            "bbox": [
+                236,
+                209,
+                403,
+                163
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000490936.jpg",
+            "bbox": [
+                112,
+                92,
+                332,
+                404
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000210394.jpg",
+            "bbox": [
+                47,
+                175,
+                592,
+                132
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000142324.jpg",
+            "bbox": [
+                150,
+                179,
+                399,
+                163
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000087038.jpg",
+            "bbox": [
+                1,
+                190,
+                638,
+                101
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000184324.jpg",
+            "bbox": [
+                3,
+                199,
+                594,
+                225
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000546823.jpg",
+            "bbox": [
+                5,
+                247,
+                634,
+                81
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000231508.jpg",
+            "bbox": [
+                1,
+                83,
+                333,
+                212
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000057597.jpg",
+            "bbox": [
+                21,
+                85,
+                615,
+                82
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000184611.jpg",
+            "bbox": [
+                64,
+                109,
+                575,
+                323
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000209222.jpg",
+            "bbox": [
+                164,
+                95,
+                321,
+                90
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000336232.jpg",
+            "bbox": [
+                98,
+                1,
+                541,
+                292
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000121242.jpg",
+            "bbox": [
+                1,
+                182,
+                615,
+                21
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000156071.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                462
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000303566.jpg",
+            "bbox": [
+                94,
+                56,
+                489,
+                189
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000277005.jpg",
+            "bbox": [
+                107,
+                252,
+                300,
+                78
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000373353.jpg",
+            "bbox": [
+                0,
+                206,
+                483,
+                195
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000363188.jpg",
+            "bbox": [
+                0,
+                129,
+                305,
+                115
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000266981.jpg",
+            "bbox": [
+                64,
+                394,
+                343,
+                43
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000336658.jpg",
+            "bbox": [
+                114,
+                248,
+                452,
+                30
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000158548.jpg",
+            "bbox": [
+                489,
+                174,
+                150,
+                37
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000254814.jpg",
+            "bbox": [
+                25,
+                23,
+                600,
+                345
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000463730.jpg",
+            "bbox": [
+                1,
+                116,
+                602,
+                151
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000400367.jpg",
+            "bbox": [
+                239,
+                212,
+                169,
+                42
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000148508.jpg",
+            "bbox": [
+                3,
+                163,
+                636,
+                261
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000521259.jpg",
+            "bbox": [
+                0,
+                126,
+                630,
+                104
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000228436.jpg",
+            "bbox": [
+                263,
+                125,
+                292,
+                45
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000052412.jpg",
+            "bbox": [
+                1,
+                193,
+                638,
+                232
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000169169.jpg",
+            "bbox": [
+                83,
+                165,
+                556,
+                292
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000163057.jpg",
+            "bbox": [
+                5,
+                257,
+                634,
+                70
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000181542.jpg",
+            "bbox": [
+                0,
+                93,
+                613,
+                155
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000570688.jpg",
+            "bbox": [
+                4,
+                187,
+                631,
+                265
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000175438.jpg",
+            "bbox": [
+                166,
+                205,
+                178,
+                40
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000474452.jpg",
+            "bbox": [
+                1,
+                175,
+                358,
+                42
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000210273.jpg",
+            "bbox": [
+                91,
+                61,
+                548,
+                261
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000433515.jpg",
+            "bbox": [
+                102,
+                287,
+                523,
+                57
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000460147.jpg",
+            "bbox": [
+                1,
+                119,
+                638,
+                244
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000138639.jpg",
+            "bbox": [
+                0,
+                252,
+                631,
+                107
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000490936.jpg",
+            "bbox": [
+                112,
+                92,
+                332,
+                404
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000105912.jpg",
+            "bbox": [
+                228,
+                147,
+                203,
+                33
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000226802.jpg",
+            "bbox": [
+                185,
+                181,
+                419,
+                42
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000136715.jpg",
+            "bbox": [
+                27,
+                18,
+                568,
+                142
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000458325.jpg",
+            "bbox": [
+                163,
+                171,
+                196,
+                77
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000259690.jpg",
+            "bbox": [
+                27,
+                98,
+                225,
+                114
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000054967.jpg",
+            "bbox": [
+                0,
+                421,
+                192,
+                52
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000284445.jpg",
+            "bbox": [
+                112,
+                322,
+                335,
+                94
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000165681.jpg",
+            "bbox": [
+                1,
+                40,
+                517,
+                91
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000165681.jpg",
+            "bbox": [
+                20,
+                112,
+                619,
+                331
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000378673.jpg",
+            "bbox": [
+                14,
+                146,
+                605,
+                80
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000350023.jpg",
+            "bbox": [
+                112,
+                289,
+                246,
+                190
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000139099.jpg",
+            "bbox": [
+                137,
+                85,
+                502,
+                118
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000255917.jpg",
+            "bbox": [
+                59,
+                253,
+                252,
+                84
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000136715.jpg",
+            "bbox": [
+                27,
+                18,
+                568,
+                142
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000356387.jpg",
+            "bbox": [
+                63,
+                191,
+                286,
+                56
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000227399.jpg",
+            "bbox": [
+                124,
+                174,
+                352,
+                113
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000125572.jpg",
+            "bbox": [
+                21,
+                333,
+                520,
+                40
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000019109.jpg",
+            "bbox": [
+                216,
+                234,
+                366,
+                116
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000256192.jpg",
+            "bbox": [
+                0,
+                0,
+                639,
+                355
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000181542.jpg",
+            "bbox": [
+                0,
+                93,
+                613,
+                155
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000338219.jpg",
+            "bbox": [
+                3,
+                150,
+                425,
+                50
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000165681.jpg",
+            "bbox": [
+                1,
+                40,
+                517,
+                91
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000165681.jpg",
+            "bbox": [
+                20,
+                112,
+                619,
+                331
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000350023.jpg",
+            "bbox": [
+                112,
+                289,
+                246,
+                190
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000158548.jpg",
+            "bbox": [
+                489,
+                174,
+                150,
+                37
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000139099.jpg",
+            "bbox": [
+                137,
+                85,
+                502,
+                118
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000254814.jpg",
+            "bbox": [
+                25,
+                23,
+                600,
+                345
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000141671.jpg",
+            "bbox": [
+                1,
+                175,
+                437,
+                159
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000336232.jpg",
+            "bbox": [
+                98,
+                1,
+                541,
+                292
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000463730.jpg",
+            "bbox": [
+                1,
+                116,
+                602,
+                151
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000460147.jpg",
+            "bbox": [
+                1,
+                119,
+                638,
+                244
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000204186.jpg",
+            "bbox": [
+                0,
+                37,
+                639,
+                88
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000078748.jpg",
+            "bbox": [
+                0,
+                19,
+                639,
+                190
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000490936.jpg",
+            "bbox": [
+                112,
+                92,
+                332,
+                404
+            ],
+            "category_id": 4,
+            "category_name": "motorcycle"
+        },
+        {
+            "file_name": "000000345027.jpg",
+            "bbox": [
+                462,
+                267,
+                130,
+                29
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000455624.jpg",
+            "bbox": [
+                37,
+                147,
+                185,
+                147
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000210394.jpg",
+            "bbox": [
+                47,
+                175,
+                592,
+                132
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000226802.jpg",
+            "bbox": [
+                185,
+                181,
+                419,
+                42
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000142324.jpg",
+            "bbox": [
+                150,
+                179,
+                399,
+                163
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000430073.jpg",
+            "bbox": [
+                140,
+                119,
+                132,
+                62
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000524850.jpg",
+            "bbox": [
+                122,
+                46,
+                317,
+                175
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000478862.jpg",
+            "bbox": [
+                59,
+                290,
+                415,
+                63
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000052412.jpg",
+            "bbox": [
+                1,
+                193,
+                638,
+                232
+            ],
+            "category_id": 3,
+            "category_name": "car"
+        },
+        {
+            "file_name": "000000504000.jpg",
+            "bbox": [
+                502,
+                119,
+                107,
+                69
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        },
+        {
+            "file_name": "000000190676.jpg",
+            "bbox": [
+                100,
+                88,
+                484,
+                95
+            ],
+            "category_id": 1,
+            "category_name": "person"
+        }
+    ]
+}
