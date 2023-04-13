@@ -126,7 +126,7 @@ def process_coco(
         file_name = img_info["file_name"]
         # pbar.set_description(f"Processing {data_type} {img_id} {file_name} images")
         img = Image.open(f"{coco_root}/{data_type}2017/{file_name}").convert('RGB')
-        draw = ImageDraw.Draw(img)
+        # draw = ImageDraw.Draw(img)
         # get ann
         anns = coco.loadAnns(coco.getAnnIds(imgIds=img_id))
         for i_obj, object in enumerate(anns):
@@ -143,12 +143,13 @@ def process_coco(
             x, y, w, h = bbox
             if (w < min_obj_size) and (h < min_obj_size):
                 continue
-            print(bbox,category_id,ann_id,COCO_MAP[category_id])
+            category_name=COCO_MAP[category_id]
+            print(bbox,category_id,ann_id,category_name)
             object_crop_info = {
                 "file_name": file_name,
                 "bbox": [x, y, w, h],
                 "category_id": category_id,
-                "category_name": COCO_MAP[category_id],
+                "category_name": category_name,
             }
             object_list.append(object_crop_info)
             x1, y1, x2, y2 = x, y, int(x + w), int(y + h)
@@ -159,13 +160,12 @@ def process_coco(
             sub_img = pad_image(sub_img, [max(sub_img.size)] * 2)
             sub_img = sub_img.resize([224, 224])
 
-            draw.rectangle((x1, y1, x2, y2))
-            draw.text((x1, y1), COCO_MAP[object["category_id"]])
+            # draw.rectangle((x1, y1, x2, y2))
+            # draw.text((x1, y1), COCO_MAP[object["category_id"]])
             
             
-            sub_img.save(f"tmp/cropped-coco/tmp-crop-{i_obj}.jpg")
-        img.save(f"tmp/cropped-coco/tmp.jpg")
-        exit()
+            sub_img.save(f"tmp/cropped-coco/crop-{img_id}_{i_obj}-{category_name}.jpg")
+        # img.save(f"tmp/cropped-coco/tmp.jpg")
     return object_list
 
 

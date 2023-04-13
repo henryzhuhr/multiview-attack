@@ -11,3 +11,4 @@ def get_linear_scheduler(optimizer, start_epoch, end_epoch, start_lr, end_lr):
         else:
             return end_lr / start_lr
     return LambdaLR(optimizer, lr_lambda=lr_func)
+

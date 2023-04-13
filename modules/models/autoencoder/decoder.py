@@ -88,7 +88,7 @@ class TextureDecoder(nn.Module):
         self.latent_dim = latent_dim
         self.num_feature = num_feature
         self.num_points = num_points
-        self.out_dim = (num_feature**3) * 3 
+        self.out_dim = (num_feature**3) * 3
 
         self.conv1 = nn.Conv1d(latent_dim, 512, 1)
         self.conv2 = nn.Conv1d(512, 1024, 1)
@@ -99,6 +99,18 @@ class TextureDecoder(nn.Module):
         self.fc2 = nn.Linear(512, 512)
         self.fc3 = nn.Linear(512, self.out_dim)
         self.act = nn.GELU()
+
+        self.dact = F.leaky_relu
+        self.layers = nn.ModuleList(
+            [
+                ConcatSquashLinear(3, 128, num_feature),
+                ConcatSquashLinear(128, 256, num_feature),
+                ConcatSquashLinear(256, 512, num_feature),
+                ConcatSquashLinear(512, 256, num_feature),
+                ConcatSquashLinear(256, 128, num_feature),
+                ConcatSquashLinear(128, 3, num_feature)
+            ]
+        )
 
     def forward(self, latent_x: Tensor):
         """
@@ -117,6 +129,25 @@ class TextureDecoder(nn.Module):
         x = x.view(B, self.num_points, (ts * ts * ts), 3)
         x = x.view(B, self.num_points, ts, ts, ts, 3)
         return x
+
+    def denoise(self, x_t: Tensor, beta: Tensor, latent: Tensor):
+        """
+            [1, latent_dim] --> [B, N, Ts, Ts, Ts, 3]
+        """
+        batch_size = x_t.size(0)
+        beta = beta.view(batch_size, 1, 1)      # (B, 1, 1)
+        latent = latent.view(batch_size, 1, -1) # (B, 1, F)
+
+        time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1) # (B, 1, 3)
+        ctx_emb = torch.cat([time_emb, latent], dim=-1)                        # (B, 1, F+3)
+
+        out = x_t
+        for i, layer in enumerate(self.layers):
+            out = layer(ctx=ctx_emb, x=out)
+            if i < len(self.layers) - 1:
+                out = self.dact(out)
+
+        return x + out
 
 
 if __name__ == '__main__':

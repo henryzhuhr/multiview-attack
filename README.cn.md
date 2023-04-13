@@ -12,3 +12,9 @@ cd neural_renderer
 python3 setup.py install
 ```
 
+## Train
+
+训练纹理编解码器
+```bash
+python3 train-AE.py
+```

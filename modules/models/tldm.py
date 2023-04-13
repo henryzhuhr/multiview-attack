@@ -1,34 +1,11 @@
+import numpy as np
 import torch
 from torch import Tensor, nn
-import torch.nn.functional as F
-from torchvision import models
+from torch.nn import functional as F
 
-import numpy as np
 
-# from .resnet import ResNet34
+
 import clip
-
-from .encoder import TextureEncoder
-
-from .decoder import TextureDecoder
-
-
-def reparameterize_gaussian(mean: Tensor, logvar: Tensor):
-    std = torch.exp(0.5 * logvar)
-    eps = torch.randn(std.size()).to(mean)
-    return mean + std * eps
-
-
-def gaussian_entropy(logvar: Tensor):
-    const = 0.5 * float(logvar.size(1)) * (1. + torch.log(torch.pi * 2))
-    ent = 0.5 * logvar.sum(dim=1, keepdim=False) + const
-    return ent
-
-
-def standard_normal_logprob(z: Tensor):
-    dim = z.size(-1)
-    log_z = -0.5 * dim * torch.log(2 * torch.pi) - z.pow(2) / 2
-    return log_z
 
 
 class VarianceSchedule(nn.Module):
@@ -73,18 +50,30 @@ class VarianceSchedule(nn.Module):
         return sigmas
 
 
-def extract_into_tensor(a, t, x_shape: list):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1, ) * (len(x_shape) - 1)))
+def reparameterize_gaussian(mean: Tensor, logvar: Tensor):
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn(std.size()).to(mean)
+    return mean + std * eps
 
 
-class TextureDiffusion(nn.Module):
+def gaussian_entropy(logvar: Tensor):
+    const = 0.5 * float(logvar.size(1)) * (1. + torch.log(torch.pi * 2))
+    ent = 0.5 * logvar.sum(dim=1, keepdim=False) + const
+    return ent
+
+
+def standard_normal_logprob(z: Tensor):
+    dim = z.size(-1)
+    log_z = -0.5 * dim * torch.log(2 * torch.pi) - z.pow(2) / 2
+    return log_z
+
+
+class TextureLatentDiffusion(nn.Module):
     def __init__(
         self,
-        num_points: int = 12306,
         texture_size: int = 4,
-        latent_dim: int = 512,      # only for encoder output
+        num_points: int = 12306,
+        latent_dim: int = 512,
         num_steps: int = 200,
         beta_1: float = 1e-4,
         beta_T: float = 0.05,
@@ -92,37 +81,25 @@ class TextureDiffusion(nn.Module):
         device: str = 'cpu',
     ):
         super().__init__()
+        out_dim = texture_size * texture_size * texture_size * 3
+        self.device = device
 
-        self.num_points = num_points
-        self.texture_size = texture_size
-        self.latent_dim = latent_dim
-        feature_dim = texture_size * texture_size * texture_size * 3
-
-        # Texture Encoder
-        self.encoder = TextureEncoder(
+        # --> texture encoder
+        self.x_encoder = TextureEncoder(
             texture_size=texture_size,
             latent_dim=latent_dim,
         ).to(device)
 
-        # CLIP latent size=512
+        # --> image encoder
         clip_model, clip_preprocess = clip.load("ViT-B/32", device=device)
-        clip_model.to(device)
-        clip_model.eval()
-        self.image_encoder = clip_model
+        self.cond_encoder = clip_model
 
-        # Texture Decoder
-        self.decoder = TextureDecoder(
-            latent_dim=self.encoder.latent_dim + 512,
-            num_points=self.num_points,
-            texture_size=self.texture_size,
-        ).to(device)
-
-        self.var_sched = VarianceSchedule(
-            num_steps=num_steps,
-            beta_1=beta_1,
-            beta_T=beta_T,
-            mode=sched_mode,
-        ).to(device)
+        # --> texture decoder
+        self.decoder = SimpleDecoder(
+            latent_dim=latent_dim,
+            num_points=num_points,
+            texture_size=texture_size,
+        )
 
     def get_loss(self, x: Tensor, kl_weight: float = 1.):
         """ x: [B, N, Ts, Ts, Ts, 3] input texture """
@@ -156,45 +133,6 @@ class TextureDiffusion(nn.Module):
         loss_recons = F.mse_loss(
             e_theta.view(-1, feature_dim),
             z_t.view(-1, feature_dim),
-            reduction='mean',
         )
         loss = kl_weight * loss_prior + loss_recons
         return loss
-
-    def sample(
-        self,
-        num_points: int,
-        context: Tensor,
-        point_dim: int = 3,
-        flexibility: float = 0.0,
-        ret_traj: bool = False,
-    ):
-        batch_size = context.size(0)
-        # 获取高斯噪声 x_T
-        x_T = torch.randn([batch_size, num_points, point_dim]).to(context.device)
-        # trajectory 弹道，轨迹。 存储去噪过程中的轨迹
-        traj = {self.var_sched.num_steps: x_T}
-        for t in range(self.var_sched.num_steps, 0, -1):
-            # 随机高斯噪声
-            z = torch.randn_like(x_T) if t > 1 else torch.zeros_like(x_T)
-            # 获取预设的加噪参数
-            alpha = self.var_sched.alphas[t]
-            alpha_bar = self.var_sched.alpha_bars[t]
-            sigma = self.var_sched.get_sigmas(t, flexibility)
-
-            c0 = 1.0 / torch.sqrt(alpha)
-            c1 = (1 - alpha) / torch.sqrt(1 - alpha_bar)
-
-            x_t = traj[t]
-            beta = self.var_sched.betas[[t] * batch_size]
-            e_theta = self.decoder.forward(x_t, beta=beta, context=context) # diffusion 计算过程
-            x_next = c0 * (x_t - c1 * e_theta) + sigma * z
-            traj[t - 1] = x_next.detach()                                   # Stop gradient and save trajectory.
-            traj[t] = traj[t].cpu()                                         # Move previous output to CPU memory.
-            if not ret_traj:
-                del traj[t]
-
-        if ret_traj:
-            return traj
-        else:
-            return traj[0]

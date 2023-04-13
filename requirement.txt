@@ -1,29 +1,36 @@
 
 
+
+
 --extra-index-url https://download.pytorch.org/whl/cu116
-torch
-torchvision
+torch==1.13.1+cu116
+torchvision==0.14.1+cu116
+pytorch-lightning==2.0.1.post0
 
 opencv-python
 
 tqdm
-pycocotools
-
 yapf
 
 
-# scikit-image
-# pandas
-# IPython
-# psutil
-# matplotlib
-# seaborn
-
-# ftfy
-# regex
-# git+https://github.com/openai/CLIP.git
-
-# pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
+pycocotools
+ipdb
 
 
-pytorch-msssim
+scikit-image
+pandas
+IPython
+psutil
+matplotlib
+seaborn
+
+# -- CLIP
+ftfy
+regex
+# git+https://github.com/openai/CLIP.git@main#egg=clip
+kornia==0.6.4
+
+# -- KNN_CUDA
+https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
+
+-e ./neural_renderer
