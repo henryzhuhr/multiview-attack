@@ -14,7 +14,6 @@ sys.path.append(os.path.split(os.path.split(__file__)[0])[0])
 from modules.data.dataset import CarlaDataset
 from modules.render import NeuralRenderer
 from modules import types
-from modules.models.mae import MAE
 
 import neural_renderer as nr
 
