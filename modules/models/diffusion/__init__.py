@@ -1,1 +1,1 @@
-from .modules import TextureDiffusion
+from .ddpm import LatentDiffusion
