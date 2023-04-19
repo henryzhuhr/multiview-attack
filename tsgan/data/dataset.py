@@ -6,7 +6,7 @@ from torch.utils import data
 from PIL import Image
 
 sys.path.append(os.getcwd())
-from modules import types
+from tsgan import types
 
 
 class DatasetDir:
