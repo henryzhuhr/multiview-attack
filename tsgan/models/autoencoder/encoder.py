@@ -1,3 +1,4 @@
+import math
 from typing import Tuple
 import torch
 from torch import nn, Tensor
@@ -42,6 +43,37 @@ class STNkd(nn.Module):
         return x
 
 
+class EqualLinear(nn.Module):
+    def __init__(
+        self,
+        in_dim,
+        out_dim,
+        bias=True,
+        bias_init=0,
+        lr_mul=1,
+        activation=None,
+    ):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(out_dim, in_dim).div_(lr_mul))
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(out_dim).fill_(bias_init))
+        else:
+            self.bias = None
+
+        self.activation = activation
+
+        self.scale = (1 / math.sqrt(in_dim)) * lr_mul
+        self.lr_mul = lr_mul
+
+    def forward(self, input):
+        if self.activation:
+            out = F.linear(input, self.weight * self.scale)
+            out = F.relu(out, self.bias * self.lr_mul)
+        else:
+            out = F.linear(input, self.weight * self.scale, bias=self.bias * self.lr_mul)
+        return out
+
+
 class TextureEncoder(nn.Module):
     def __init__(
         self,
@@ -49,7 +81,7 @@ class TextureEncoder(nn.Module):
         latent_dim: int = 512, # lantent size
     ):
         super(TextureEncoder, self).__init__()
-        self.latent_dim=latent_dim
+        self.latent_dim = latent_dim
 
         self.stn_kd = STNkd(num_feature * num_feature * num_feature * 3)
 
@@ -60,16 +92,11 @@ class TextureEncoder(nn.Module):
         self.conv4 = nn.Conv1d(512, 1024, 1)
 
         # mean
-        self.fc1_mean = nn.Linear(1024, 512)
-        self.fc2_mean = nn.Linear(512, 256)
-        self.fc3_mean = nn.Linear(256, latent_dim)
+        self.fc1 = nn.Linear(1024, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.fc3 = nn.Linear(512, latent_dim)
 
-        # logvariance
-        self.fc1_logvar = nn.Linear(1024, 512)
-        self.fc2_logvar = nn.Linear(512, 256)
-        self.fc3_logvar = nn.Linear(256, latent_dim)
-
-        self.act = nn.GELU()
+        self.act = nn.ReLU()
 
     def forward(self, x: Tensor):
         """
@@ -97,67 +124,8 @@ class TextureEncoder(nn.Module):
         x = torch.max(x, 2, keepdim=True)[0] # [B, 1024, 1]
         x = x.view(-1, 1024)
 
-        mean: Tensor = self.act(self.fc1_mean(x)) # [B, 1024]
-        mean = self.act(self.fc2_mean(mean))      # [B, 1024]
-        mean = self.fc3_mean(mean)                # [B, 1024]
+        x = self.act(self.fc1(x)) # [B, 1024]
+        x = self.act(self.fc2(x)) # [B, 1024]
+        x = self.fc3(x)           # [B, 1024]
 
-        logvar: Tensor = self.act(self.fc1_logvar(x)) # [B, 1024]
-        logvar = self.act(self.fc2_logvar(logvar))    # [B, 1024]
-        logvar = self.fc3_logvar(logvar)              # [B, 1024]
-
-        return mean, logvar
-
-
-class FrozenClipImageEmbedder(nn.Module):
-    """
-        Uses the CLIP image encoder.
-        """
-    def __init__(
-        self,
-        model,
-        jit=False,
-        device='cuda' if torch.cuda.is_available() else 'cpu',
-        antialias=False,
-    ):
-        super().__init__()
-        self.model, _ = clip.load(name=model, device=device, jit=jit)
-
-        self.antialias = antialias
-
-        self.register_buffer('mean', torch.Tensor([0.48145466, 0.4578275, 0.40821073]), persistent=False)
-        self.register_buffer('std', torch.Tensor([0.26862954, 0.26130258, 0.27577711]), persistent=False)
-
-    def preprocess(self, x):
-        # normalize to [0,1]
-        x = kornia.geometry.resize(x, (224, 224), interpolation='bicubic', align_corners=True, antialias=self.antialias)
-        x = (x + 1.) / 2.
-        # renormalize according to clip
-        x = kornia.enhance.normalize(x, self.mean, self.std)
         return x
-
-    def forward(self, x):
-        # x is assumed to be in range [-1,1]
-        return self.model.encode_image(self.preprocess(x))
-
-
-if __name__ == '__main__':
-
-    batch_size = 1
-    n_face = 12306
-    texture_size = 4
-    color_channel = 3
-    
-    x = torch.rand(
-        batch_size,
-        n_face,
-        texture_size,
-        texture_size,
-        texture_size,
-        color_channel,
-    )
-
-    pointfeat = TextureEncoder(num_feature=texture_size, zdim=256)
-
-    mean, logvar = pointfeat.forward(x)
-    print('mean', mean.size())
-    print('logvar', logvar.size())

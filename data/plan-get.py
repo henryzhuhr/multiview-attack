@@ -9,11 +9,8 @@ import json
 
 import cv2
 import numpy as np
-
 import carla
-
-sys.path.append(os.getcwd())
-from modules import types
+from tsgan import types
 
 
 class Settings:

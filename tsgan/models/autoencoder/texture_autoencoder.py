@@ -4,13 +4,14 @@ import torch
 from torch import Tensor, optim, nn
 
 
-try:
-    from .encoder import TextureEncoder
-    from .decoder import TextureDecoder
-except ImportError as e:
-    from encoder import TextureEncoder
-    from decoder import TextureDecoder
-
+# try:
+#     from .encoder import TextureEncoder
+#     from .decoder import TextureDecoder
+# except ImportError as e:
+#     from encoder import TextureEncoder
+#     from decoder import TextureDecoder
+from .encoder import TextureEncoder
+from .decoder import TextureDecoder
 
 
 class TextureAutoEncoder(nn.Module):

@@ -11,10 +11,9 @@ import numpy as np
 import torch
 from torch import Tensor, optim, nn
 
-sys.path.append(os.path.split(os.path.split(__file__)[0])[0])
-import modules
-from modules.render import NeuralRenderer
-from modules import types
+import tsgan
+from tsgan.render import NeuralRenderer
+from tsgan import types
 import neural_renderer as nr
 
 
@@ -22,14 +21,14 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
     parser.add_argument('--texture_size', type=int, default=4)
-    scence_name = 'Town10HD-point_0000-distance_001-direction_1'
-    parser.add_argument('--scence_image', type=str, default=f'data/dataset/images/{scence_name}.png')
-    parser.add_argument('--scence_label', type=str, default=f'data/dataset/labels/{scence_name}.json')
+    scence_name = 'Town10HD-point_0000-distance_000-direction_1'
+    parser.add_argument('--scence_image', type=str, default=f'tmp/data/images/{scence_name}.png')
+    parser.add_argument('--scence_label', type=str, default=f'tmp/data/labels/{scence_name}.json')
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--save_dir', type=str, default='tmp/TextureAutoEncoder')
-    parser.add_argument('--save_name', type=str, default='tae')
+    parser.add_argument('--save_dir', type=str, default='tmp/autoencoder')
+    parser.add_argument('--save_name', type=str, default='autoencoder')
 
-    parser.add_argument('--epoches', type=int, default=5000)
+    parser.add_argument('--epoches', type=int, default=10000)
     parser.add_argument('--lr', type=float, default=0.1)
     parser.add_argument('--milestones', type=List[int], default=[3000, 10000])
     return parser.parse_args()
@@ -74,25 +73,42 @@ def main():
     print('textures: ', neural_renderer.textures.size())
 
     # Load Model
-    tae_model = modules.models.autoencoder.TextureAutoEncoder(
-        num_feature=4,
-        num_points=12306,
-        latent_dim=256,
-    )
-    tae_model.to(args.device)
-    
+    num_feature = 4
+    num_points = 12306
+    latent_dim = 256
+    encoder = tsgan.models.autoencoder.TextureEncoder(
+        num_feature=num_feature,
+        latent_dim=latent_dim,
+    ).to(args.device)
+    decoder = tsgan.models.autoencoder.TextureDecoder(
+        latent_dim=latent_dim,
+        num_points=num_points,
+        num_feature=num_feature,
+    ).to(args.device)
+
+    criterion = nn.L1Loss().to(args.device)
+
     optimizer = optim.SGD(
-        tae_model.parameters(),
+        [{
+            'params': encoder.parameters()
+        }, {
+            'params': decoder.parameters()
+        }],
         lr=1e-1,
     )
     lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, args.milestones, gamma=0.1)
 
-    tae_model.train()
+    encoder.train()
+    decoder.train()
     pabr = tqdm.tqdm(range(args.epoches))
     for i in pabr:
         x = neural_renderer.textures
         optimizer.zero_grad()
-        loss,rec_x = tae_model.get_ae_loss(x)
+        # --- forward ---
+        latent_x= encoder.forward(x)
+        rec_x = decoder.forward(latent_x)
+        loss = criterion.forward(x, rec_x)
+
         expoch_loss = loss.item()
         loss.backward()
         optimizer.step()
@@ -125,12 +141,13 @@ def main():
                     alpha = alpha_channel[x][y]
                     render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * image[x][y]
 
-            save_name = "render-car"
+            save_name = "autoencoder"
             cv2.imwrite(os.path.join(args.save_dir, f'{save_name}-{i}.png'), render_image)
             torch.save(
-                tae_model.state_dict(),
+                {'encoder':encoder.state_dict(),'decoder':decoder.state_dict(),},
                 os.path.join(args.save_dir, f'{args.save_name}-{i}.pt'),
             )
+
 
 if __name__ == '__main__':
     main()

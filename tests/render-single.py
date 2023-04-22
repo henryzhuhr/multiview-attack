@@ -11,9 +11,9 @@ import torch
 from torch import Tensor
 
 sys.path.append(os.path.split(os.path.split(__file__)[0])[0])
-from modules.data.dataset import CarlaDataset
-from modules.render import NeuralRenderer
-from modules import types
+from tsgan.data.dataset import CarlaDataset
+from tsgan.render import NeuralRenderer
+from tsgan import types
 
 import neural_renderer as nr
 

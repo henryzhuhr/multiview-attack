@@ -10,13 +10,13 @@ from torch.optim.lr_scheduler import LambdaLR
 
 
 sys.path.append(os.path.split(os.path.split(__file__)[0])[0])
-import modules
+import tsgan
 
 
 
 # import torch.utils.tensorboard
 
-from modules.render import NeuralRenderer
+from tsgan.render import NeuralRenderer
 
 from data import CarlaDataset
 # from modules.models.diffusion import TextureDiffusion
@@ -95,7 +95,7 @@ def main():
     print("batch textures size: ", batch_textures.size())
 
     
-    model = modules.models.diffusion.TextureDiffusion(
+    model = tsgan.models.diffusion.TextureDiffusion(
         num_points = 12306,
         num_feature = 4,
         num_steps=200,

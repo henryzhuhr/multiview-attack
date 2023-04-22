@@ -89,13 +89,13 @@ class CroppedCOCO(data.Dataset):
         self.data_type = "train" if is_train else "val"
         with open(config_file, "r") as f:
             config_dict = yaml.load(f, Loader=yaml.FullLoader)
-        self.coco_root = config_dict["coco_root"]
+        self.coco_root = os.path.expanduser(config_dict["coco_root"])
         coco = COCO(f"{self.coco_root}/annotations/instances_{self.data_type}2017.json")
 
         cats = coco.loadCats(coco.getCatIds())
         categories = {cat['id']: cat['name'] for cat in cats if (cat['name'] in config_dict["categories"])}
         # print('COCO (selected) categories:', len(categories))
-        print(categories)
+        # print(categories)
 
         # print("load ids", list(categories.keys()))
         img_ids = []
@@ -106,7 +106,7 @@ class CroppedCOCO(data.Dataset):
         self.categories = categories # selected categories
         self.transform = transform
         self.object_list = self.prepare_crop(coco,img_ids, self.data_type, categories, min_obj_size)
-        print(f"{self.data_type} set get {len(self.object_list)} objects")
+        print(f"[Data] {self.data_type} set get {len(self.object_list)} objects:",categories)
 
     def prepare_crop(self, coco: COCO,img_ids, data_type, categories, min_obj_size):
 
@@ -161,7 +161,7 @@ class CroppedCOCO(data.Dataset):
         x1, y1, x2, y2 = x, y, int(x + w), int(y + h)
         sub_img = img.crop([x1, y1, x2, y2])
         pad_img = pad_image(sub_img, [max(sub_img.size)] * 2)
-        pad_img = pad_img.resize([224, 224])
+        # pad_img = pad_img.resize([224, 224])
         if self.transform:
             pad_img = self.transform(pad_img)
 

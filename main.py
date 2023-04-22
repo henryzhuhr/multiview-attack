@@ -19,7 +19,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateM
 # from pytorch_lightning.utilities.distributed import rank_zero_only
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
-import modules
+import tsgan
 
 
 def get_parser(**parser_kwargs):
@@ -106,7 +106,7 @@ def main():
 
 
         # model
-        model=modules.models.utils.instantiate_from_config(config.model)
+        model=tsgan.models.utils.instantiate_from_config(config.model)
 
 
     except Exception:

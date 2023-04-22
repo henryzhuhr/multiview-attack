@@ -6,10 +6,10 @@ import torch
 from torch import optim
 from torch.backends import cudnn
 from skimage.metrics import peak_signal_noise_ratio
-from modules.models.decoder import PointwiseNet
-from modules.models.encoder import TextureEncoder
+from tsgan.models.decoder import PointwiseNet
+from tsgan.models.encoder import TextureEncoder
 
-from modules.render.render import NeuralRenderer
+from tsgan.render.render import NeuralRenderer
 
 cudnn.enabled = True
 cudnn.benchmark = True

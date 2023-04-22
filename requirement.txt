@@ -1,28 +1,26 @@
+--extra-index-url https://download.pytorch.org/whl/cu116
+torch==1.12.0+cu116
+torchvision==0.13.0+cu116
+pytorch-lightning==
 
-
-
-
-# --extra-index-url https://download.pytorch.org/whl/cu116
-# torch==1.13.1+cu116
-# torchvision==0.14.1+cu116
+# --extra-index-url https://download.pytorch.org/whl/cu118
+# torch==2.0.0+cu118
+# torchvision==0.15.1+cu118
 # pytorch-lightning==1.9.0
 
---extra-index-url https://download.pytorch.org/whl/cu118
-torch==2.0.0+cu118
-torchvision==0.15.1+cu118
-pytorch-lightning==1.9.0
 
-
-omegaconf   # a YAML based hierarchical configuration system
+# omegaconf   # a YAML based hierarchical configuration system
 
 opencv-python
 
 tqdm
 yapf
+pyyaml
+ninja
 
 
 pycocotools
-ipdb
+# ipdb
 
 
 scikit-image
@@ -37,12 +35,14 @@ ftfy
 regex
 -e ./libs/clip
 kornia==0.6.4
+-e ./libs/neural_renderer
+-e ./tsgan
 
 # -- KNN_CUDA
 # https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
 
--e ./neural_renderer
--e ./libs/taming-transformers
 
     # - -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
     # - -e git+https://github.com/openai/CLIP.git@main#egg=clip
+
+carla 

@@ -5,13 +5,13 @@ from torch import Tensor, nn
 from torch.utils import data
 
 import tqdm
-from modules.models.resnet import ResNet34
+from tsgan.models.resnet import ResNet34
 from torchvision import models
 
 # import torch.utils.tensorboard
 
-from modules.render import NeuralRenderer
-from modules.models.diffusion import TextureDiffusion
+from tsgan.render import NeuralRenderer
+from tsgan.models.diffusion import TextureDiffusion
 from utils import get_linear_scheduler
 
 
