@@ -12,25 +12,46 @@ COCO_CATEGORIES_MAP = {
     2: 'bicycle',
     3: 'car',
     4: 'motorcycle',
+    5: 'airplane',
+    6: 'bus',
     7: 'train',
     8: 'truck',
     9: 'boat',
+    10: 'traffic light',
+    11: 'fire hydrant',
+    13: 'stop sign',
+    14: 'parking meter',
     15: 'bench',
     16: 'bird',
+    17: 'cat',
+    18: 'dog',
     19: 'horse',
     20: 'sheep',
+    21: 'cow',
+    22: 'elephant',
     23: 'bear',
     24: 'zebra',
     25: 'giraffe',
     27: 'backpack',
+    28: 'umbrella',
     31: 'handbag',
+    32: 'tie',
     33: 'suitcase',
     34: 'frisbee',
     35: 'skis',
+    36: 'snowboard',
+    37: 'sports ball',
     38: 'kite',
+    39: 'baseball bat',
+    40: 'baseball glove',
+    41: 'skateboard',
     42: 'surfboard',
+    43: 'tennis racket',
     44: 'bottle',
+    46: 'wine glass',
+    47: 'cup',
     48: 'fork',
+    49: 'knife',
     50: 'spoon',
     51: 'bowl',
     52: 'banana',
@@ -39,26 +60,35 @@ COCO_CATEGORIES_MAP = {
     55: 'orange',
     56: 'broccoli',
     57: 'carrot',
+    58: 'hot dog',
     59: 'pizza',
     60: 'donut',
+    61: 'cake',
     62: 'chair',
+    63: 'couch',
+    64: 'potted plant',
     65: 'bed',
+    67: 'dining table',
     70: 'toilet',
     72: 'tv',
     73: 'laptop',
     74: 'mouse',
     75: 'remote',
+    76: 'keyboard',
+    77: 'cell phone',
     78: 'microwave',
     79: 'oven',
     80: 'toaster',
+    81: 'sink',
     82: 'refrigerator',
     84: 'book',
     85: 'clock',
     86: 'vase',
+    87: 'scissors',
+    88: 'teddy bear',
+    89: 'hair drier',
     90: 'toothbrush'
 }
-
-COCO_CLASS = list(COCO_CATEGORIES_MAP.values())
 
 
 def pad_image(image: Image.Image, target_size: List[int]):
@@ -85,6 +115,7 @@ class CroppedCOCO(data.Dataset):
         is_train: bool = False,
         min_obj_size: int = 100,
         transform=None,
+        load_all_class: bool = False, # rewrite the categories in config file
     ):
         self.data_type = "train" if is_train else "val"
         with open(config_file, "r") as f:
@@ -93,7 +124,12 @@ class CroppedCOCO(data.Dataset):
         coco = COCO(f"{self.coco_root}/annotations/instances_{self.data_type}2017.json")
 
         cats = coco.loadCats(coco.getCatIds())
-        categories = {cat['id']: cat['name'] for cat in cats if (cat['name'] in config_dict["categories"])}
+        COCO_CATEGORIES_MAP = {cat['id']: cat['name'] for cat in cats}
+        
+        if not load_all_class and "categories" in config_dict:
+            categories = {cat['id']: cat['name'] for cat in cats if (cat['name'] in config_dict["categories"])}
+        else:
+            categories = COCO_CATEGORIES_MAP
         # print('COCO (selected) categories:', len(categories))
         # print(categories)
 
@@ -103,12 +139,16 @@ class CroppedCOCO(data.Dataset):
             img_ids.extend(coco.getImgIds(catIds=[id]))
 
         self.COCO_CATEGORIES_MAP = COCO_CATEGORIES_MAP
-        self.categories = categories # selected categories
+        self.COCO_CLASS = list(COCO_CATEGORIES_MAP.values())
+        self.categories = categories                                                                            # selected categories
         self.transform = transform
-        self.object_list = self.prepare_crop(coco,img_ids, self.data_type, categories, min_obj_size)
-        print(f"[Data] {self.data_type} set get {len(self.object_list)} objects:",categories)
+        self.object_list = self.prepare_crop(coco, img_ids, self.data_type, categories, min_obj_size)
+        print(
+            f"[Data] {self.data_type} set get {len(categories)} classes with {len(self.object_list)} objects:",
+            categories
+        )
 
-    def prepare_crop(self, coco: COCO,img_ids, data_type, categories, min_obj_size):
+    def prepare_crop(self, coco: COCO, img_ids, data_type, categories, min_obj_size):
 
         object_list = []
         pbar = tqdm.tqdm(img_ids)
@@ -137,8 +177,8 @@ class CroppedCOCO(data.Dataset):
                     "file_name": file_name,
                     "bbox": [x, y, w, h],
                     "category_id": category_id,
-                    "category_name": COCO_CATEGORIES_MAP[category_id],
-                    "predict_id": COCO_CLASS.index(COCO_CATEGORIES_MAP[category_id])
+                    "category_name": self.COCO_CATEGORIES_MAP[category_id],
+                    "predict_id": self.COCO_CLASS.index(self.COCO_CATEGORIES_MAP[category_id])
                 }
                 object_list.append(object_crop_info)
         return object_list
@@ -171,6 +211,16 @@ class CroppedCOCO(data.Dataset):
             "category_name": category_name,
             "predict_id": predict_id,
         }
+
+    def class_detail(self):
+        class_dict = {}
+        for i in range(self.__len__()):
+            object_info = self.object_list[i]
+            category_name = object_info["category_name"]
+            if category_name not in class_dict:
+                class_dict[category_name] = 0
+            class_dict[category_name] += 1
+        return class_dict
 
 
 if __name__ == "__main__":
