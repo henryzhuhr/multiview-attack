@@ -6,9 +6,6 @@ import numpy as np
 
 
 class ConcatSquashLinear(nn.Module):
-    """
-        MLP 变体
-    """
     def __init__(self, dim_in, dim_out, dim_ctx):
         super(ConcatSquashLinear, self).__init__()
 

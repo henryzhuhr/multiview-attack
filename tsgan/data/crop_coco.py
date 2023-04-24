@@ -116,6 +116,7 @@ class CroppedCOCO(data.Dataset):
         min_obj_size: int = 100,
         transform=None,
         load_all_class: bool = False, # rewrite the categories in config file
+        show_detail=False,
     ):
         self.data_type = "train" if is_train else "val"
         with open(config_file, "r") as f:
@@ -143,10 +144,11 @@ class CroppedCOCO(data.Dataset):
         self.categories = categories                                                                            # selected categories
         self.transform = transform
         self.object_list = self.prepare_crop(coco, img_ids, self.data_type, categories, min_obj_size)
-        print(
-            f"[Data] {self.data_type} set get {len(categories)} classes with {len(self.object_list)} objects:",
-            categories
-        )
+        if show_detail:
+            print(
+                f"[Data] {self.data_type} set get {len(categories)} classes with {len(self.object_list)} objects:",
+                categories
+            )
 
     def prepare_crop(self, coco: COCO, img_ids, data_type, categories, min_obj_size):
 

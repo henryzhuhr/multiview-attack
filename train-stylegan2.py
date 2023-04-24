@@ -189,7 +189,8 @@ def train(
 
         noise = mixing_noise(
             args.batch, args.latent, args.mixing, device
-        )                                                # [torch.Size([16, 512]), torch.Size([16, 512])]
+        )    
+        print(args.batch,[t.size() for t in noise])# [torch.Size([16, 512]), torch.Size([16, 512])]
         fake_img, _ = generator.forward(noise)
 
         if args.augment:
@@ -350,7 +351,7 @@ if __name__ == "__main__":
     parser.add_argument('--save_dir', type=str, default='stylegan2')
     parser.add_argument('--arch', type=str, default='stylegan2', help='model architectures (stylegan2 | swagan)')
     parser.add_argument("--iter", type=int, default=20000, help="total training iterations")
-    parser.add_argument("--batch", type=int, default=8, help="batch sizes for each gpus")
+    parser.add_argument("--batch", type=int, default=1, help="batch sizes for each gpus")
     parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--n_sample", type=int, default=64, help="number of the samples generated during training")
     parser.add_argument("--size", type=int, default=256, help="image sizes for the model")

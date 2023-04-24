@@ -75,7 +75,7 @@ def main():
     # Load Model
     num_feature = 4
     num_points = 12306
-    latent_dim = 256
+    latent_dim = 512
     encoder = tsgan.models.autoencoder.TextureEncoder(
         num_feature=num_feature,
         latent_dim=latent_dim,
