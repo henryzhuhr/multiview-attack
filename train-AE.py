@@ -113,7 +113,7 @@ def main():
         loss.backward()
         optimizer.step()
         lr_scheduler.step()
-        pabr.set_description("iter:%d loss:%.8f" % (i, expoch_loss))
+        pabr.set_description("iter:%d loss:%.8f latent: %s" % (i, expoch_loss,str(latent_x.size())))
 
         # if ((i < 5000) and (i % 500 == 0)) or (i % 10000 == 0):
         if i % 500 == 0:
@@ -142,11 +142,11 @@ def main():
                     render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * image[x][y]
 
             save_name = "autoencoder"
-            cv2.imwrite(os.path.join(args.save_dir, f'{save_name}-{i}.png'), render_image)
-            torch.save(
-                {'encoder':encoder.state_dict(),'decoder':decoder.state_dict(),},
-                os.path.join(args.save_dir, f'{args.save_name}-{i}.pt'),
-            )
+            # cv2.imwrite(os.path.join(args.save_dir, f'{save_name}-{i}.png'), render_image)
+            # torch.save(
+            #     {'encoder':encoder.state_dict(),'decoder':decoder.state_dict(),},
+            #     os.path.join(args.save_dir, f'{args.save_name}-{i}.pt'),
+            # )
 
 
 if __name__ == '__main__':

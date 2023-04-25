@@ -1,22 +1,17 @@
-import math
+import datetime
 from typing import Dict, List
-import os, sys
-import json
+import os
 import argparse
 
 import tqdm
-import cv2
 import numpy as np
 
 import torch
 from torch import Tensor, optim, nn
 
 import tsgan
-from tsgan.render import NeuralRenderer
-from tsgan import types
-import neural_renderer as nr
 from torch.utils import data
-from torchvision import transforms, utils
+from torchvision import transforms
 
 from tsgan.models.classifer import resnet50
 
@@ -52,7 +47,7 @@ def main():
     )
 
     croppedcoco_train_set = tsgan.data.CroppedCOCO(
-        config_file='configs/coco.yaml',
+        config='configs/dataset.yaml',
         is_train=True,
         transform=transform,
         load_all_class=True,
@@ -65,7 +60,7 @@ def main():
         drop_last=True,
     )
     croppedcoco_valid_set = tsgan.data.CroppedCOCO(
-        config_file='configs/coco.yaml',
+        config='configs/dataset.yaml',
         is_train=False,
         transform=transform,
         load_all_class=True,
@@ -86,18 +81,20 @@ def main():
 
     criterion = nn.CrossEntropyLoss().to(device)
 
-    optimizer = optim.SGD(model.parameters(), lr=1e-1)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr)
     lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, args.milestones, gamma=0.1)
 
     best_acc = 0
     for epoch in range(args.epoches):
-        print('\033[32m', end='')
-        print('[Epoch]%d/%d' % (epoch, args.epoches), end='  ')
-        print('[Batch Size]%d' % (args.batch_size), end='  ')
-        current_lr = optimizer.state_dict()['param_groups'][0]['lr']
-        print('[LR]%f' % (current_lr), end='  ')
-        print(':%s' % (device), end='  ')
-        print('\033[0m')
+        print(
+            "\033[32m",
+            f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
+            f"epoch:{epoch}/{args.epoches}",
+            f"batch_size:{args.batch_size}",
+            f"lr:{optimizer.state_dict()['param_groups'][0]['lr']}",
+            f"{device}",
+            "\033[0m",
+        )
 
         # ====== train ======
         epoch_loss, epoch_acc = 0., 0. # epoch

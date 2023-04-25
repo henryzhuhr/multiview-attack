@@ -1,6 +1,6 @@
 import os
 import random
-from typing import List
+from typing import List, Union
 from torch.utils import data
 from pycocotools.coco import COCO
 from PIL import Image
@@ -91,42 +91,39 @@ COCO_CATEGORIES_MAP = {
 }
 
 
-def pad_image(image: Image.Image, target_size: List[int]):
-    iw, ih = image.size         # 原始图像的尺寸
-    w, h = target_size          # 目标图像的尺寸
-    scale = min(w / iw, h / ih) # 转换的最小比例
 
-    # 保证长或宽，至少一个符合目标图像的尺寸
-    nw = int(iw * scale)
-    nh = int(ih * scale)
-
-    image = image.resize((nw, nh), Image.BICUBIC)          # 缩小图像
-    new_image = Image.new('RGB', target_size, (0, 0, 0))   # 生成黑色图像
-                                                           # // 为整数除法，计算图像的位置
-    new_image.paste(image, ((w - nw) // 2, (h - nh) // 2)) # 将图像填充为中间图像，两侧为灰色的样式
-
-    return new_image
 
 
 class CroppedCOCO(data.Dataset):
     def __init__(
         self,
-        config_file: str,
+        config: Union[str, dict] ,
         is_train: bool = False,
         min_obj_size: int = 100,
         transform=None,
         load_all_class: bool = False, # rewrite the categories in config file
         show_detail=False,
     ):
+        
+        # check config if it is a file path or a dict
+        if isinstance(config, str):
+            if not os.path.exists(config):
+                raise FileNotFoundError(f"config file {config} not found")
+            with open(config, "r") as f:
+                config_dict = yaml.load(f, Loader=yaml.FullLoader)
+                config_dict=config_dict["coco"]            
+        elif isinstance(config, dict):
+            config_dict = config["coco"]
+        else:
+            raise TypeError("config should be str(.yaml file path) or dict")
+        
         self.data_type = "train" if is_train else "val"
-        with open(config_file, "r") as f:
-            config_dict = yaml.load(f, Loader=yaml.FullLoader)
-        self.coco_root = os.path.expanduser(config_dict["coco_root"])
+        self.coco_root = os.path.expanduser(config_dict["root"])
         coco = COCO(f"{self.coco_root}/annotations/instances_{self.data_type}2017.json")
 
         cats = coco.loadCats(coco.getCatIds())
         COCO_CATEGORIES_MAP = {cat['id']: cat['name'] for cat in cats}
-        
+
         if not load_all_class and "categories" in config_dict:
             categories = {cat['id']: cat['name'] for cat in cats if (cat['name'] in config_dict["categories"])}
         else:
@@ -141,7 +138,7 @@ class CroppedCOCO(data.Dataset):
 
         self.COCO_CATEGORIES_MAP = COCO_CATEGORIES_MAP
         self.COCO_CLASS = list(COCO_CATEGORIES_MAP.values())
-        self.categories = categories                                                                            # selected categories
+        self.categories = categories                                                                                # selected categories
         self.transform = transform
         self.object_list = self.prepare_crop(coco, img_ids, self.data_type, categories, min_obj_size)
         if show_detail:
@@ -202,7 +199,7 @@ class CroppedCOCO(data.Dataset):
         x, y, w, h = bbox
         x1, y1, x2, y2 = x, y, int(x + w), int(y + h)
         sub_img = img.crop([x1, y1, x2, y2])
-        pad_img = pad_image(sub_img, [max(sub_img.size)] * 2)
+        pad_img = self.pad_image(sub_img, [max(sub_img.size)] * 2)
         # pad_img = pad_img.resize([224, 224])
         if self.transform:
             pad_img = self.transform(pad_img)
@@ -214,6 +211,22 @@ class CroppedCOCO(data.Dataset):
             "predict_id": predict_id,
         }
 
+    @staticmethod
+    def pad_image(image: Image.Image, target_size: List[int]):
+        iw, ih = image.size         # 原始图像的尺寸
+        w, h = target_size          # 目标图像的尺寸
+        scale = min(w / iw, h / ih) # 转换的最小比例
+
+        # 保证长或宽，至少一个符合目标图像的尺寸
+        nw = int(iw * scale)
+        nh = int(ih * scale)
+
+        image = image.resize((nw, nh), Image.BICUBIC)          # 缩小图像
+        new_image = Image.new('RGB', target_size, (0, 0, 0))   # 生成黑色图像
+                                                            # // 为整数除法，计算图像的位置
+        new_image.paste(image, ((w - nw) // 2, (h - nh) // 2)) # 将图像填充为中间图像，两侧为灰色的样式
+
+        return new_image
     def class_detail(self):
         class_dict = {}
         for i in range(self.__len__()):

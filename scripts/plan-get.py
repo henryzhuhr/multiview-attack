@@ -10,6 +10,7 @@ import json
 import cv2
 import numpy as np
 import carla
+sys.path.append(os.getcwd())
 from tsgan import types
 
 

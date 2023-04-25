@@ -1,9 +1,3 @@
-
-
-
-
-
-
 eval "$(conda shell.bash hook)"
 conda activate tsgan
 echo -e "\n\033[01;36m[ENV]$(which python) \033[0m\n"
@@ -25,5 +19,5 @@ export CUDA_VISIBLE_DEVICES=0,1
 python train-stylegan2-condition.py  \
     --save_dir stylegan2-cropcoco_car-0423_1438 \
     --autoencoder_pretrained tmp/autoencoder/autoencoder-3000.pt \
-    --batch 2 --iter 800000
+    --batch 4 --iter 800000
 
