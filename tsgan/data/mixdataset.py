@@ -121,8 +121,8 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
             data_list["carla"]["image"].append(item["carla"]["image"])
 
 
-            print("\033[01;32m", item, "\033[0m")
-            print()
+            # print("\033[01;32m", item, "\033[0m")
+            # print()
         
 
         
