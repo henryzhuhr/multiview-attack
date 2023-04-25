@@ -9,9 +9,9 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.autograd import Function
 from .layers import (
+    LatentStyledConv,
     PixelNorm,
     EqualLinear,
-    StyledConv,
     ToRGB,
     ConstantInput,
     ConvLayer,
@@ -24,9 +24,7 @@ from tsgan.utils import logheader
 class Generator(nn.Module):
     def __init__(
         self,
-        size,                             # image size
-        npoint: int = 12306,              # number of points
-        num_feature: int = 4,             # number of num_feature
+        size=1024,                        # image size
         style_dim: int = 512,             # latent dim
         conditiom_latent_dim: int = 2048,
         n_mlp: int = 8,                   # Mapping network layers from z -> w
@@ -37,9 +35,6 @@ class Generator(nn.Module):
         super().__init__()
 
         self.size = size
-        self.npoint = npoint
-        self.num_feature = num_feature
-        self.nfeat_agg = num_feature * num_feature * num_feature
 
         self.condition_mapping_layer = nn.Linear(conditiom_latent_dim, style_dim) # [B,2048]->[B,512]
 
@@ -48,7 +43,7 @@ class Generator(nn.Module):
         self.style_dim = style_dim
         layers = [PixelNorm()]
         for i in range(n_mlp):
-            layers.append(EqualLinear(style_dim, style_dim, lr_mul=lr_mlp, activation="fused_lrelu"))
+            layers.append(EqualLinear(style_dim, style_dim, lr_mul=lr_mlp, activation=True))
         self.style = nn.Sequential(*layers)
 
         self.channels = {
@@ -65,7 +60,7 @@ class Generator(nn.Module):
 
         self.input = ConstantInput(self.channels[4])
 
-        self.conv1 = StyledConv(self.channels[4], self.channels[4], 3, style_dim, blur_kernel=blur_kernel)
+        self.conv1 = LatentStyledConv(self.channels[4], self.channels[4], 3, style_dim, blur_kernel=blur_kernel)
         self.to_rgb1 = ToRGB(self.channels[4], style_dim, upsample=False)
 
         self.log_size = int(math.log(size, 2))
@@ -75,6 +70,7 @@ class Generator(nn.Module):
         self.upsamples = nn.ModuleList()
         self.to_rgbs = nn.ModuleList()
         self.noises = nn.Module()
+        self.latent_noises = nn.Module()
 
         in_channel = self.channels[4]
 
@@ -83,17 +79,30 @@ class Generator(nn.Module):
             shape = [1, 1, 2**res, 2**res]
             self.noises.register_buffer(f"noise_{layer_idx}", torch.randn(*shape))
 
+        for layer_idx in range(self.num_layers):
+            res = (layer_idx + 5) // 2
+            self.latent_noises.register_buffer(f"latent_noise_{layer_idx}", torch.randn(*[1, 1, 2**res]))
+            # print(f"latent_noise_{layer_idx}", torch.randn(*[1, 1, 2**res]).shape)
+
         for i in range(3, self.log_size + 1):
             out_channel = self.channels[2**i]
-            self.convs.append(StyledConv(in_channel, out_channel, 3, style_dim, upsample=True, blur_kernel=blur_kernel))
-            self.convs.append(StyledConv(out_channel, out_channel, 3, style_dim, blur_kernel=blur_kernel))
+            self.convs.append(
+                LatentStyledConv(in_channel, out_channel, 3, style_dim, upsample=True, blur_kernel=blur_kernel)
+            )
+            self.convs.append(LatentStyledConv(out_channel, out_channel, 3, style_dim, blur_kernel=blur_kernel))
             self.to_rgbs.append(ToRGB(out_channel, style_dim))
             in_channel = out_channel
         self.n_latent = self.log_size * 2 - 2
-        self.modulation_layers = [self.conv1.conv.modulation, self.to_rgb1.conv.modulation] + \
-                                 [layer.conv.modulation for layer in self.convs]            + \
-                                 [layer.conv.modulation for layer in self.to_rgbs]
-        self.drop_feature = nn.Conv2d(int((self.size**2) / self.nfeat_agg), self.npoint, 1, bias=False)
+        # self.modulation_layers = [self.conv1.conv.modulation, self.to_rgb1.conv.modulation] + \
+        #                          [layer.conv.modulation for layer in self.convs]            + \
+        #                          [layer.conv.modulation for layer in self.to_rgbs]
+
+        # TODO: set lr_mlp
+        self.out_mapping_layer = nn.Sequential(
+            EqualLinear(size * 3, size * 2, lr_mul=lr_mlp, activation=True),
+            EqualLinear(size * 2, size, lr_mul=lr_mlp, activation=True),
+            EqualLinear(size, style_dim, lr_mul=lr_mlp),
+        )
 
     def forward(
         self,
@@ -103,25 +112,18 @@ class Generator(nn.Module):
         inject_index=None,
         truncation=1,
         truncation_latent=None,
-        input_is_latent=False,
-        noise=None,
-        randomize_noise=True,
     ):
 
         styles = [self.style(s) for s in [x, self.condition_mapping_layer(cond_latent)]]
 
-        if noise is None:
-            if randomize_noise:
-                noise = [None] * self.num_layers
-            else:
-                noise = [getattr(self.noises, f"noise_{i}") for i in range(self.num_layers)]
+        # noise = [getattr(self.noises, f"noise_{i}") for i in range(self.num_layers)]
+        noise = [getattr(self.latent_noises, f"latent_noise_{i}") for i in range(self.num_layers)]
 
         if truncation < 1: # TODO: 该操作使得latent code w在平均值附近，生图质量不会太糟
             style_t = []
             for style in styles:
                 style_t.append(truncation_latent + truncation * (style - truncation_latent))
             styles = style_t
-
 
         if len(styles) < 2:
             inject_index = self.n_latent
@@ -149,29 +151,31 @@ class Generator(nn.Module):
         # 根据交叉点位置的不同，可以得到不同的融合结果。
 
         # --------------------- #
+
         out = self.input(latent)
+        # print(logheader(),"latent",latent.shape)
+
         out = self.conv1(out, latent[:, 0], noise=noise[0])
-        skip = self.to_rgb1(out, latent[:, 1])
+        skip: torch.Tensor = self.to_rgb1(out, latent[:, 1])
 
         i = 1
         for i, (conv1, conv2, noise1, noise2, to_rgb) in enumerate(
             zip(
-                self.convs[:: 2],
+                self.convs[:: 2],                                   # from index 0, step=2
                 self.convs[1 :: 2],
                 noise[1 :: 2],
                 noise[2 :: 2],
                 self.to_rgbs,
             )
         ):
+            print(logheader(), i)
             out = conv1(out, latent[:, i], noise=noise1)
             out = conv2(out, latent[:, i + 1], noise=noise2)
             skip = to_rgb(out, latent[:, i + 2], skip)
             i += 2
-        B, C, H, W = skip.size()
-        x = skip.reshape(B, C, self.nfeat_agg, -1).permute(0, 3, 2, 1)
-        x = self.drop_feature(x)
-        x = x.reshape(B, self.npoint, self.num_feature, self.num_feature, self.num_feature, 3)
-        
+
+        x = skip.reshape(skip.size(0), -1)
+        x=self.out_mapping_layer(x)
         return x if not return_latents else (x, latent)
 
 

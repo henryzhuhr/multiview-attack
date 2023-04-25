@@ -48,11 +48,11 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
             load_all_class=load_all_class,
             show_detail=show_detail,
         )
-        self.COCO_CATEGORIES_MAP = self.COCO_CATEGORIES_MAP
-        self.COCO_CLASS = self.COCO_CLASS
-        self.categories = self.categories
-        self.transform = self.transform
-        self.object_list = self.object_list
+        # self.COCO_CATEGORIES_MAP = self.COCO_CATEGORIES_MAP
+        # self.COCO_CLASS = self.COCO_CLASS
+        # self.categories = self.categories
+        # self.transform = self.transform
+        # self.object_list = self.object_list
 
         self.data_type = "train" if is_train else "val"
 
@@ -129,6 +129,4 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
         data_list["coco"]["image"]= torch.stack(data_list["coco"]["image"])
         data_list["coco"]["predict_id"]= torch.stack(data_list["coco"]["predict_id"],dim=0)
 
-
-        
         return data_list

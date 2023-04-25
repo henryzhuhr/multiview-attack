@@ -94,14 +94,14 @@ class UpFirDn2d(Function):
         pad_x0, pad_x1, pad_y0, pad_y1 = pad
 
         kernel_h, kernel_w = kernel.shape
-        batch, channel, in_h, in_w = input.shape
+        batch, channel, size= input.shape
         ctx.in_size = input.shape
 
-        input = input.reshape(-1, in_h, in_w, 1)
+        input = input.reshape(-1, size, 1)
 
         ctx.save_for_backward(kernel, torch.flip(kernel, [0, 1]))
 
-        out_h = (in_h * up_y + pad_y0 + pad_y1 - kernel_h + down_y) // down_y
+        out_h = (size * up_y + pad_y0 + pad_y1 - kernel_h + down_y) // down_y
         out_w = (in_w * up_x + pad_x0 + pad_x1 - kernel_w + down_x) // down_x
         ctx.out_size = (out_h, out_w)
 

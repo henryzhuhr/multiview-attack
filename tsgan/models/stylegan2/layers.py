@@ -10,10 +10,13 @@ from torch.nn import functional as F
 from torch.autograd import Function
 
 from ..op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d, conv2d_gradfix
+from tsgan.utils import logheader
+# print(logheader(),"input",input.shape) # TODO
 
 class PixelNorm(nn.Module):
     def __init__(self):
         super().__init__()
+
     def forward(self, input):
         return input * torch.rsqrt(torch.mean(input**2, dim=1, keepdim=True) + 1e-8)
 
@@ -132,7 +135,7 @@ class EqualLinear(nn.Module):
         版权声明：本文为CSDN博主「三思为上策」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
         原文链接：https://blog.csdn.net/qq_43522986/article/details/125195395
     """
-    def __init__(self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1, activation=None):
+    def __init__(self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1, activation:bool=None):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_dim, in_dim).div_(lr_mul))
         if bias:
@@ -156,7 +159,7 @@ class EqualLinear(nn.Module):
         return (f"{self.__class__.__name__}({self.weight.shape[1]}, {self.weight.shape[0]})")
 
 
-class ModulatedConv2d(nn.Module):
+class ModulatedConv1d(nn.Module):
     def __init__(
         self,
         in_channel,
@@ -192,7 +195,7 @@ class ModulatedConv2d(nn.Module):
         fan_in = in_channel * kernel_size**2
         self.scale = 1 / math.sqrt(fan_in)
         self.padding = kernel_size // 2
-        self.weight = nn.Parameter(torch.randn(1, out_channel, in_channel, kernel_size, kernel_size))
+        self.weight = nn.Parameter(torch.randn(1, out_channel, in_channel, kernel_size))
         self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
         self.demodulate = demodulate
         self.fused = fused
@@ -202,64 +205,47 @@ class ModulatedConv2d(nn.Module):
             f"{self.__class__.__name__}({self.in_channel}, {self.out_channel}, {self.kernel_size}, "
             f"upsample={self.upsample}, downsample={self.downsample})"
         )
+    
+    def forward(self, input:torch.Tensor, style:torch.Tensor):
+        batch, in_channel, size = input.size()        
+        style = self.modulation(style)
+        style = style.view(batch, 1, in_channel, 1)
 
-    def forward(self, input, style, is_s_code=False):
-        batch, in_channel, height, width = input.shape
-        if not self.fused:
-            weight = self.scale * self.weight.squeeze(0)
-            if is_s_code:
-                style = style[self.modulation]
-            else:
-                style = self.modulation(style)
-            if self.demodulate:
-                w = weight.unsqueeze(0) * style.view(batch, 1, in_channel, 1, 1)
-                dcoefs = (w.square().sum((2, 3, 4)) + 1e-8).rsqrt()
-            input = input * style.reshape(batch, in_channel, 1, 1)
-            if self.upsample:
-                weight = weight.transpose(0, 1)
-                out = conv2d_gradfix.conv_transpose2d(input, weight, padding=0, stride=2)
-                out = self.blur(out)
-            elif self.downsample:
-                input = self.blur(input)
-                out = conv2d_gradfix.conv2d(input, weight, padding=0, stride=2)
-            else:
-                out = conv2d_gradfix.conv2d(input, weight, padding=self.padding)
-            if self.demodulate:
-                out = out * dcoefs.view(batch, -1, 1, 1)
-            return out
-        if is_s_code:
-            style = style[self.modulation]
-        else:
-            style = self.modulation(style)
-        style = style.view(batch, 1, in_channel, 1, 1)
-        weight = self.scale * self.weight * style
+        
+        weight = self.scale * (self.weight * style)
         if self.demodulate:
-            demod = torch.rsqrt(weight.pow(2).sum([2, 3, 4]) + 1e-8)
-            weight = weight * demod.view(batch, self.out_channel, 1, 1, 1)
-        weight = weight.view(batch * self.out_channel, in_channel, self.kernel_size, self.kernel_size)
+            demod = torch.rsqrt(weight.pow(2).sum([2, 3]) + 1e-8)
+            weight = weight * demod.view(batch, self.out_channel, 1, 1)
+        weight = weight.view(batch * self.out_channel, in_channel, self.kernel_size)
+        
         if self.upsample:
-            input = input.view(1, batch * in_channel, height, width)
-            weight = weight.view(batch, self.out_channel, in_channel, self.kernel_size, self.kernel_size)
+            input = input.view(1, batch * in_channel, size)
+            weight = weight.view(batch, self.out_channel, in_channel, self.kernel_size)
             weight = weight.transpose(1, 2).reshape(
-                batch * in_channel, self.out_channel, self.kernel_size, self.kernel_size
+                batch * in_channel, self.out_channel, self.kernel_size
             )
-            out = conv2d_gradfix.conv_transpose2d(input, weight, padding=0, stride=2, groups=batch)
-            _, _, height, width = out.shape
-            out = out.view(batch, self.out_channel, height, width)
-            out = self.blur(out)
+            # out = conv2d_gradfix.conv_transpose2d(input, weight, padding=0, stride=2, groups=batch)
+            out =F.conv_transpose1d(input, weight, stride=2, padding=1,output_padding=1,groups=batch)
+
+            _, _, size = out.shape
+            out = out.view(batch, self.out_channel, size)
+            # out = self.blur(out)
         elif self.downsample:
             input = self.blur(input)
-            _, _, height, width = input.shape
-            input = input.view(1, batch * in_channel, height, width)
-            out = conv2d_gradfix.conv2d(input, weight, padding=0, stride=2, groups=batch)
-            _, _, height, width = out.shape
-            out = out.view(batch, self.out_channel, height, width)
+            _, _, size = input.shape
+            input = input.view(1, batch * in_channel, size)
+            # out = conv2d_gradfix.conv2d(input, weight, padding=0, stride=2, groups=batch)
+            out = F.conv1d(input, weight, stride=2, padding=0, groups=batch)
+            _, _, size = out.shape
+            out = out.view(batch, self.out_channel, size)
 
         else:
-            input = input.view(1, batch * in_channel, height, width)
-            out = conv2d_gradfix.conv2d(input, weight, padding=self.padding, groups=batch)
-            _, _, height, width = out.shape
-            out = out.view(batch, self.out_channel, height, width)
+            input = input.view(1, batch * in_channel, size)
+            # out = conv2d_gradfix.conv2d(input, weight, padding=self.padding, groups=batch)
+            out = F.conv1d(input, weight, padding=self.padding, groups=batch)
+            _, _, size = out.shape
+            out = out.view(batch, self.out_channel, size)
+            
 
         return out
 
@@ -267,32 +253,31 @@ class ModulatedConv2d(nn.Module):
 class NoiseInjection(nn.Module):
     def __init__(self):
         super().__init__()
-
         self.weight = nn.Parameter(torch.zeros(1))
 
-    def forward(self, image, noise=None):
+    def forward(self, latent, noise=None):
         if noise is None:
-            batch, _, height, width = image.shape
-            noise = image.new_empty(batch, 1, height, width).normal_()
+            batch, _, size = latent.shape
+            noise = latent.new_empty(batch, 1, size).normal_()
 
-        return image + self.weight * noise
+        return latent + self.weight * noise
 
 
 class ConstantInput(nn.Module):
     def __init__(self, channel, size=4):
         super().__init__()
-        self.input = nn.Parameter(torch.randn(1, channel, size, size))
+        self.input = nn.Parameter(torch.randn(1, channel, size))
 
     def forward(self, input, is_s_code=False):
         if not is_s_code:
             batch = input.shape[0]
         else:
             batch = next(iter(input.values())).shape[0]
-        out = self.input.repeat(batch, 1, 1, 1)
+        out = self.input.repeat(batch, 1, 1)
         return out
 
 
-class StyledConv(nn.Module):
+class LatentStyledConv(nn.Module):
     def __init__(
         self,
         in_channel,
@@ -304,7 +289,7 @@ class StyledConv(nn.Module):
         demodulate=True,
     ):
         super().__init__()
-        self.conv = ModulatedConv2d(
+        self.conv = ModulatedConv1d(
             in_channel,
             out_channel,
             kernel_size,
@@ -318,28 +303,33 @@ class StyledConv(nn.Module):
         # self.activate = ScaledLeakyReLU(0.2)
         self.activate = FusedLeakyReLU(out_channel)
 
-    def forward(self, input, style, noise=None, is_s_code=False):
-        out = self.conv(input, style, is_s_code=is_s_code)
+    def forward(self, input, style, noise=None):
+        out = self.conv(input, style)
         out = self.noise(out, noise=noise)
         # out = out + self.bias
         out = self.activate(out)
         return out
 
 
+
+
+
 class ToRGB(nn.Module):
     def __init__(self, in_channel, style_dim, upsample=True, blur_kernel=[1, 3, 3, 1]):
         super().__init__()
         if upsample:
-            self.upsample = Upsample(blur_kernel)
-        self.conv = ModulatedConv2d(in_channel, 3, 1, style_dim, demodulate=False)
-        self.bias = nn.Parameter(torch.zeros(1, 3, 1, 1))
-    def forward(self, input, style, skip=None, is_s_code=False):
-        out = self.conv(input, style, is_s_code=is_s_code)
+            # self.upsample = Upsample(blur_kernel)
+            self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
+        self.conv = ModulatedConv1d(in_channel, 3, 1, style_dim, demodulate=False)
+        self.bias = nn.Parameter(torch.zeros(1, 3, 1))
+
+    def forward(self, input, style, skip=None):
+        out = self.conv(input, style)
         out = out + self.bias
         if skip is not None:
-            skip = self.upsample(skip)
-            out = out + skip
+            out = out + self.upsample(skip)
         return out
+
 
 class ConvLayer(nn.Sequential):
     def __init__(
@@ -380,12 +370,14 @@ class ConvLayer(nn.Sequential):
             layers.append(FusedLeakyReLU(out_channel, bias=bias))
         super().__init__(*layers)
 
+
 class ResBlock(nn.Module):
     def __init__(self, in_channel, out_channel, blur_kernel=[1, 3, 3, 1]):
         super().__init__()
         self.conv1 = ConvLayer(in_channel, in_channel, 3)
         self.conv2 = ConvLayer(in_channel, out_channel, 3, downsample=True)
         self.skip = ConvLayer(in_channel, out_channel, 1, downsample=True, activate=False, bias=False)
+
     def forward(self, input):
         out = self.conv1(input)
         out = self.conv2(out)
