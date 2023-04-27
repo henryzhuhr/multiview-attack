@@ -55,12 +55,13 @@ def train(args):
         loader,
         mix_train_set,
         device,
-    )=prepare_training(args)
+    ) = prepare_training(args)
 
     with torch.no_grad():
         real_texture = neural_renderer.textures
         texture_latent = encoder.forward(real_texture)
         batch_real_texture = real_texture.repeat(args.batch, *[1] * (len(real_texture.size()) - 1))
+        batch_texture_latent = texture_latent.repeat(args.batch, *[1] * (len(texture_latent.size()) - 1))
 
     if get_rank() == 0 and wandb is not None and args.wandb:
         wandb.init(project="stylegan 2")
@@ -93,25 +94,21 @@ def train(args):
 
     sample_z = torch.randn(args.n_sample, args.latent, device=device)
 
-    sample_save_dir = os.path.join("tmp", args.save_dir, "sample")
-    os.makedirs(sample_save_dir, exist_ok=True)
-    checkpoint_save_dir = os.path.join("tmp", args.save_dir, "checkpoint")
-    os.makedirs(checkpoint_save_dir, exist_ok=True)
+    # sample_save_dir = os.path.join("tmp", args.save_dir, "sample")
+    os.makedirs(sample_save_dir := os.path.join("tmp", args.save_dir, "sample"), exist_ok=True)
+    # checkpoint_save_dir = os.path.join("tmp", args.save_dir, "checkpoint")
+    os.makedirs(checkpoint_save_dir := os.path.join("tmp", args.save_dir, "checkpoint"), exist_ok=True)
 
     loader = sample_data(loader)
     for idx in pbar:
         i = idx + args.start_iter
-        mix_batch_data = next(loader)
-        batch_coco= mix_batch_data["coco"]
-        batch_carla = mix_batch_data["carla"]
+        batch_data = next(loader)
 
-        cond_images = batch_coco["image"].to(device)
-        label = batch_coco["predict_id"].to(device)
+        cond_images = batch_data["coco"]["image"].to(device)
+        coco_label = batch_data["coco"]["predict_id"].to(device)
 
-        carla_scene_image = batch_carla["image"]
-
-        print(f"cond_images: {cond_images.shape}")
-        print(f"carla_scene_image: {[d.shape for d in carla_scene_image]}")
+        carla_scene_images = batch_data["carla"]["image"]
+        carla_render_params = batch_data["carla"]["render_param"]
 
         requires_grad(generator, False)
         requires_grad(discriminator, True)
@@ -119,49 +116,23 @@ def train(args):
         # ----------------------------------------
         # perform backward
         # ----------------------------------------
-        texture_latent_mix_noise = texture_latent.repeat(args.batch, 1)
+        texture_latent_mix_noise = batch_texture_latent.clone()
         for i_b in range(args.batch):
-            noise_rotio = 0.001
+            noise_rotio = 0.5
             noise = torch.randn_like(texture_latent_mix_noise[i_b])
             texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
 
         with torch.no_grad():
             cond_latent = cond_model.forward_latent(cond_images)
+            cond_latent = torch.rand_like(cond_latent) * 0.001
 
         # ----------------------------------------
         # perform backward
         # ----------------------------------------
         fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-        fake_texture = decoder.forward(fake_texture_latent)
-        print(f"fake_texture_latent: {fake_texture_latent.shape}")
-        print(f"fake_texture: {fake_texture.shape}")
-        exit()
-        real_pred = discriminator.forward(batch_real_texture)
-        fake_pred = discriminator.forward(fake_texture)
 
-        # image = cv2.imread(f'tmp/data/images/Town10HD-point_0000-distance_000-direction_1.png')
-        # (
-        #         rgb_images,
-        #         depth_images,
-        #         alpha_images,
-        # ) = neural_renderer.renderer.forward(
-        #     neural_renderer.vertices,
-        #     neural_renderer.faces,
-        #     torch.tanh(fake_texture),
-        # )
-        # rgb_image: torch.Tensor = rgb_images[0]
-        # rgb_img: np.ndarray = rgb_image.detach().cpu().numpy() * 255
-        # rgb_img = rgb_img.transpose(1, 2, 0)
-
-        # alpha_image: torch.Tensor = alpha_images[0]
-        # alpha_channel: np.ndarray = alpha_image.detach().cpu().numpy()
-
-        # render_image = np.zeros(rgb_img.shape)
-        # for x in range(alpha_channel.shape[0]):
-        #     for y in range(alpha_channel.shape[1]):
-        #         alpha = alpha_channel[x][y]
-        #         render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * image[x][y]
-        # cv2.imwrite(os.path.join(sample_save_dir, f'{i}.png'), render_image)
+        real_pred = discriminator.forward(batch_texture_latent, cond_latent)
+        fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
 
         if i % args.d_loss_every == 0:
             # D logistic loss
@@ -180,12 +151,14 @@ def train(args):
         #   D regularization for every d_reg_every iterations
         # ----------------------------------------
         if i % args.d_reg_every == 0:
-            batch_real_texture.requires_grad = True
-            real_pred = discriminator(batch_real_texture)
-            r1_loss = d_r1_loss(real_pred, batch_real_texture)
+            batch_texture_latent.requires_grad = True
+            real_pred = discriminator(batch_texture_latent, cond_latent)
+            r1_loss = d_r1_loss(real_pred, batch_texture_latent)
+            total_reg_loss = args.r1 / 2 * r1_loss * args.d_reg_every + 0 * real_pred[0]
             discriminator.zero_grad()
-            (args.r1 / 2 * r1_loss * args.d_reg_every + 0 * real_pred[0]).backward()
+            total_reg_loss.backward()
             d_optim.step()
+            batch_texture_latent.requires_grad = False
 
         loss_dict["r1"] = r1_loss
 
@@ -194,8 +167,10 @@ def train(args):
         requires_grad(discriminator, False)
 
         # G backward
-        fake_texture = generator.forward(texture_latent_mix_noise, cond_latent)
-        fake_pred = discriminator(fake_texture)
+        # fake_texture = generator.forward(texture_latent_mix_noise, cond_latent)
+        fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
+                                                                                       # fake_texture = decoder.forward(fake_texture_latent)
+        fake_pred = discriminator(fake_texture_latent, cond_latent)
 
         g_loss = g_nonsaturating_loss(fake_pred)
         loss_dict["g"] = g_loss
@@ -206,19 +181,61 @@ def train(args):
         # ----------------------------------------
         #   G regularization for every g_reg_every iterations
         # ----------------------------------------
-        # if i % args.g_reg_every == 0:
-        #     fake_texture, latents = generator(texture_latent_mix_noise,cond_latent, return_latents=True)
-        #     path_loss, mean_path_length, path_lengths = g_path_regularize(fake_texture, latents, mean_path_length)
-        #     generator.zero_grad()
+        if i % args.g_reg_every == 0:
+            fake_texture_latent, latents = generator.forward(texture_latent_mix_noise, cond_latent, return_latents=True)
+            path_loss, mean_path_length, path_lengths = g_path_regularize(
+                fake_texture_latent, latents, mean_path_length
+            )
+            generator.zero_grad()
 
-        #     weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
-        #     # if args.path_batch_shrink:
-        #     #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
-        #     weighted_path_loss.backward()
-        #     g_optim.step()
-        #     mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
+            weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
+            # if args.path_batch_shrink:
+            #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
+            weighted_path_loss.backward()
+            g_optim.step()
+            mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
         loss_dict["path"] = path_loss
         loss_dict["path_length"] = path_lengths.mean()
+
+        if i % args.g_det_every == 0:
+            fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent)
+            fake_textures = decoder.forward(fake_texture_latent)
+
+            for i_b in range(fake_textures.size(0)):
+                carla_scene_image = carla_scene_images[i_b]
+                carla_render_param = carla_render_params[i_b]
+                fake_texture = fake_textures[i_b].unsqueeze(0)
+                tm = neural_renderer.textures_mask
+                render_texture = tm * fake_texture + (1 - tm) * neural_renderer.textures
+
+                neural_renderer.set_render_perspective(
+                    carla_render_param["camera_transform"],
+                    carla_render_param["vehicle_transform"],
+                    carla_render_param["fov"],
+                )
+                (
+                    rgb_images,
+                    depth_images,
+                    alpha_images,
+                ) = neural_renderer.renderer.forward(
+                    neural_renderer.vertices,
+                    neural_renderer.faces,
+                    torch.tanh(render_texture),
+                )
+                rgb_image: torch.Tensor = rgb_images[0]
+                rgb_img: np.ndarray = rgb_image.detach().cpu().numpy() * 255
+                rgb_img = rgb_img.transpose(1, 2, 0)
+
+                alpha_image: torch.Tensor = alpha_images[0]
+                alpha_channel: np.ndarray = alpha_image.detach().cpu().numpy()
+
+                render_image = np.zeros(rgb_img.shape)
+                for x in range(alpha_channel.shape[0]):
+                    for y in range(alpha_channel.shape[1]):
+                        alpha = alpha_channel[x][y]
+                        render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * carla_scene_image[x][y]
+                cv2.imwrite(os.path.join(sample_save_dir, f'render.png'), render_image)
+                # cv2.imwrite(os.path.join(sample_save_dir, f'epoch{i}-batch{i_b}.png'), render_image)
 
         accumulate(g_ema, g_module, accum)
 
@@ -292,7 +309,7 @@ def prepare_training(args):
     transform = transforms.Compose(
         [
             transforms.RandomHorizontalFlip(),
-            transforms.Resize([224,224]),
+            transforms.Resize([224, 224]),
             transforms.ToTensor(),
         ]
     )
@@ -358,11 +375,10 @@ def prepare_training(args):
     #   GAN
     # ----------------------------------------------
     generator = Generator(
-        conditiom_latent_dim=cond_model.fc.in_features,
-        n_mlp=args.n_mlp,
-        channel_multiplier=args.channel_multiplier
+        conditiom_latent_dim=cond_model.fc.in_features, n_mlp=args.n_mlp, channel_multiplier=args.channel_multiplier
     ).to(device)
-    discriminator = Discriminator(args.size, channel_multiplier=args.channel_multiplier).to(device)
+
+    discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).to(device)
     g_ema = Generator(
         style_dim=args.latent,
         conditiom_latent_dim=cond_model.fc.in_features,
@@ -471,15 +487,12 @@ def g_nonsaturating_loss(fake_pred):
     return loss
 
 
-def g_path_regularize(fake_img, latents, mean_path_length, decay=0.01):
-    noise = torch.randn_like(fake_img) / math.sqrt(fake_img.shape[2] * fake_img.shape[3])
-    grad, = autograd.grad(outputs=(fake_img * noise).sum(), inputs=latents, create_graph=True)
+def g_path_regularize(fake_latent, latents, mean_path_length, decay=0.01):
+    noise = torch.randn_like(fake_latent) / math.sqrt(fake_latent.size(1))
+    grad, = autograd.grad(outputs=(fake_latent * noise).sum(), inputs=latents, create_graph=True)
     path_lengths = torch.sqrt(grad.pow(2).sum(2).mean(1))
-
     path_mean = mean_path_length + decay * (path_lengths.mean() - mean_path_length)
-
     path_penalty = (path_lengths - path_mean).pow(2).mean()
-    # path_penalty = F.mse_loss(path_lengths ,path_mean)
 
     return path_penalty, path_mean.detach(), path_lengths
 
@@ -512,6 +525,7 @@ if __name__ == "__main__":
     parser.add_argument("--d_loss_every", type=int, default=10, help="interval of the r1 regularization")
     parser.add_argument("--d_reg_every", type=int, default=16, help="interval of the r1 regularization")
     parser.add_argument("--g_reg_every", type=int, default=4, help="interval of the path length regularization")
+    parser.add_argument("--g_det_every", type=int, default=1000, help="interval of the path length regularization")
     parser.add_argument("--mixing", type=float, default=0.9, help="probability of latent code mixing")
     parser.add_argument("--ckpt", type=str, default=None, help="path to the checkpoints to resume training")
     parser.add_argument("--lr", type=float, default=0.002, help="learning rate")

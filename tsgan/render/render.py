@@ -36,13 +36,16 @@ class NeuralRenderer(nn.Module):
         self.textures = textures.unsqueeze(0).to(device)
 
         self.selected_faces = selected_faces
+
+        textures_mask = torch.zeros_like(textures).bool().to(device)
         if selected_faces is not None:
-            textures_mask = torch.zeros(textures.size()).to(device)
             for face_id in selected_faces:
-                textures_mask[face_id - 1, :, :, :, :] = 1
-            render_textures = textures * textures_mask
+                textures_mask[face_id - 1, :, :, :, :] = True
         else:
-            render_textures = textures
+            textures_mask = ~textures_mask
+        self.textures_mask = textures_mask.int()
+        render_textures = textures * self.textures_mask
+        
         self.render_textures = nn.Parameter(render_textures.unsqueeze(0)).to(device) # 待渲染的纹理 (优化参数)
 
         # 初始化渲染器
@@ -88,7 +91,7 @@ class NeuralRenderer(nn.Module):
         >>>                     [  0.         -89.60925293   0.        ]]   # 旋转参数        
         """
 
-        view_scale = 0.54 * 1.3                                   # 超参数： 数值越小 模型越大
+        view_scale = 0.54 * 1.3                                  # 超参数： 数值越小 模型越大
         scale = (self.renderer.viewing_angle / fov) * view_scale # 视角缩放系数，FOV相关
 
         # 距离
