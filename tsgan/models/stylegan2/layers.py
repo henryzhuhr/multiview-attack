@@ -13,6 +13,20 @@ from ..op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d, conv2d_gradfix
 from tsgan.utils import logheader
 # print(logheader(),"input",input.shape) # TODO
 
+
+def l1norm(X, dim, eps=1e-8):
+    """L1-normalize columns of X"""
+    norm = torch.abs(X).sum(dim=dim, keepdim=True) + eps
+    X = torch.div(X, norm)
+    return X 
+
+
+def l2norm(X, dim, eps=1e-8):
+    """L2-normalize columns of X """
+    norm = torch.pow(X, 2).sum(dim=dim, keepdim=True).sqrt() + eps
+    X = torch.div(X, norm)
+    return X
+
 class PixelNorm(nn.Module):
     def __init__(self):
         super().__init__()
@@ -135,7 +149,7 @@ class EqualLinear(nn.Module):
         版权声明：本文为CSDN博主「三思为上策」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
         原文链接：https://blog.csdn.net/qq_43522986/article/details/125195395
     """
-    def __init__(self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1, activation:bool=None):
+    def __init__(self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1, activation=True):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_dim, in_dim).div_(lr_mul))
         if bias:
@@ -382,5 +396,21 @@ class ResBlock(nn.Module):
         out = self.conv1(input)
         out = self.conv2(out)
         skip = self.skip(input)
+        out = (out + skip) / math.sqrt(2)
+        return out
+
+class LatentResBlock(nn.Module):
+    def __init__(self, in_channel, out_channel):
+        super().__init__()
+        self.fc1 = nn.Linear(in_channel, in_channel)
+        self.act1=nn.LeakyReLU()
+        self.fc2 = nn.Linear(in_channel, out_channel)
+        self.act2=nn.LeakyReLU()
+        self.skip = nn.Linear(in_channel, out_channel, bias=False)
+
+    def forward(self, x:Tensor):
+        out = self.act1(self.fc1(x))
+        out = self.act2(self.fc2(out))
+        skip = self.skip(x)
         out = (out + skip) / math.sqrt(2)
         return out
