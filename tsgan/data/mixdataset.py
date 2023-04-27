@@ -103,10 +103,8 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
             },
             "carla": {
                 "name": [],
-                "vehicle_transform": [],
-                "camera_transform": [],
-                "fov": [],
                 "image": [],
+                "render_param": [],
             }
         }
         for item in batch:
@@ -115,18 +113,19 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
             data_list["coco"]["category_name"].append(item["coco"]["category_name"])
             data_list["coco"]["predict_id"].append(torch.tensor(item["coco"]["predict_id"]))
             data_list["carla"]["name"].append(item["carla"]["name"])
-            data_list["carla"]["vehicle_transform"].append(item["carla"]["vehicle_transform"])
-            data_list["carla"]["camera_transform"].append(item["carla"]["camera_transform"])
-            data_list["carla"]["fov"].append(item["carla"]["fov"]) 
             data_list["carla"]["image"].append(item["carla"]["image"])
-
+            data_list["carla"]["render_param"].append(
+                {
+                    "vehicle_transform": item["carla"]["vehicle_transform"],
+                    "camera_transform": item["carla"]["camera_transform"],
+                    "fov": item["carla"]["fov"],
+                }
+            )
 
             # print("\033[01;32m", item, "\033[0m")
             # print()
-        
 
-        
-        data_list["coco"]["image"]= torch.stack(data_list["coco"]["image"])
-        data_list["coco"]["predict_id"]= torch.stack(data_list["coco"]["predict_id"],dim=0)
+        data_list["coco"]["image"] = torch.stack(data_list["coco"]["image"])
+        data_list["coco"]["predict_id"] = torch.stack(data_list["coco"]["predict_id"], dim=0)
 
         return data_list
