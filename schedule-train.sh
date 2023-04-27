@@ -31,7 +31,7 @@ function perform_in_time() {
 }
 
 
-perform_in_time "08:00"
+# perform_in_time "08:00"
 
 eval "$(conda shell.bash hook)"
 conda activate tsgan
@@ -41,7 +41,7 @@ echo -e "\n\033[01;36m[ENV]$(which python) \033[0m\n"
 
 
 
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=1
 
 
 python train-classifier.py

@@ -18,7 +18,7 @@ from tsgan.models.classifer import resnet50
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--device', type=str, default='cuda:1')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--save_dir', type=str, default='tmp/classifier')
     parser.add_argument('--save_name', type=str, default='resnet50')
 
@@ -35,6 +35,7 @@ def main():
     args.size = 224
 
     device = args.device
+
 
     os.makedirs(args.save_dir, exist_ok=True)
 
