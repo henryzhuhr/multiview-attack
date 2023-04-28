@@ -40,7 +40,6 @@ class Generator(nn.Module):
         self.condition_mapping_layer = nn.Linear(conditiom_latent_dim, style_dim) # [B,2048]->[B,512]
 
         # G_Mapping network from z -> w
-
         self.style_dim = style_dim
         layers = [PixelNorm()]
         for i in range(n_mlp):
