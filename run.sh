@@ -17,7 +17,7 @@ export OMP_NUM_THREADS=8
 export CUDA_VISIBLE_DEVICES=0,1
 # -m torch.distributed.launch --nproc_per_node=1 
 python train-stylegan2-condition.py  \
-    --save_dir stylegan2-cropcoco_car-0423_1438 \
+    --save_dir stylegan2-cropcoco_car \
     --autoencoder_pretrained tmp/autoencoder/autoencoder-3000.pt \
-    --batch 4 --iter 800000
+    --batch 32 --iter 800000
 

@@ -1,9 +1,0 @@
-coco_root: ~/Datasets/coco
-train_annotation_file: instances_train2017.json
-val_annotation_file: instances_val2017.json
-categories:
-  - car
-  - tv
-  - bowl
-  - truck
-  - laptop
