@@ -211,7 +211,6 @@ def train(args):
                 )
 
                 t_rgb_image = rgb_images.squeeze(0)
-                c, h, w = t_rgb_image.shape
                 t_alpha_image = alpha_images
                 t_scene_image = torch.from_numpy(carla_scene_image).to(t_rgb_image.device).permute(2, 0, 1).float() / 255.  # yapf: disable
                 t_render_image = t_alpha_image * t_rgb_image + (1 - t_alpha_image) * t_scene_image
@@ -238,27 +237,28 @@ def train(args):
                     find_boxes.append([x, y, x + w, y + h])
                 fc = np.array(find_boxes)
                 box = [min(fc[:, 0]), min(fc[:, 1]), max(fc[:, 2]), max(fc[:, 3])] # [x1,y1,x2,y2]
-                
+
                 if False:
                     [x1, y1, x2, y2] = box
                     cv2.rectangle(scene_npimg, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
                     label = mix_train_set.COCO_CLASS[int(coco_label[i_b])]
                     cv2.putText(scene_npimg, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    
+
                     cv2.imwrite(os.path.join(sample_save_dir, f'render.png'), scene_npimg)
                     # cv2.imwrite(os.path.join(sample_save_dir, f'render-{idx}.png'), scene_npimg)
 
                 # YOLOv5 label: [image_idx, class, x_center, y_center, width, height]
                 # why image_idx: [#253](https://github.com/ultralytics/yolov3/issues/253)
                 # see [collate_fn](https://github.com/ultralytics/yolov5/blob/8ecc7276ecdd9c409b3dc8b9051142569009c6f4/utils/dataloaders.py#LL890C17-L890C21)
+                c, h, w = t_rgb_image.shape
                 render_label_list.append(torch.tensor([
                     i_b, int(coco_label[i_b]),
                     (box[0] + box[2]) / 2 / w,
                     (box[1] + box[3]) / 2 / h,
                     (box[2] - box[0]) / w,
                     (box[3] - box[1]) / h,
-                ]))# yapf: disable
+                ])) # yapf:disable
             render_images = torch.cat(render_image_list, dim=0).to(device)
             render_scenes = torch.cat(render_scene_list, dim=0).to(device)
             render_labels = torch.stack(render_label_list, dim=0).to(device)
@@ -273,6 +273,7 @@ def train(args):
             # for p in pred:
             #     p.requires_grad = True
             (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
+            det_loss = 0.05 * lbox + 1.0 * lobj + 0.5 * lcls
             # det_loss.backward(retain_graph=True)
         loss_dict["lbox"] = lbox
         loss_dict["lobj"] = lobj
