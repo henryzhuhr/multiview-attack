@@ -106,7 +106,7 @@ class Generator(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,           # [B, 512]
+        x: torch.Tensor,           # [B, 2048]
         cond_latent: torch.Tensor, # [B, 2048]
         return_latents=False,
         inject_index=None,
@@ -114,7 +114,7 @@ class Generator(nn.Module):
         truncation_latent=None,
     ):
 
-        styles = [self.style(s) for s in [x, self.condition_mapping_layer(cond_latent)]]
+        styles = [self.style(s) for s in [x, cond_latent]]
 
         # noise = [getattr(self.noises, f"noise_{i}") for i in range(self.num_layers)]
         noise = [getattr(self.latent_noises, f"latent_noise_{i}") for i in range(self.num_layers)]
@@ -181,23 +181,27 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, latent_dim=512, cond_dim=512):
+    def __init__(self, latent_dim=2048, cond_dim=2048):
         super().__init__()
-        h_dim = 256
+        h_dim = 512
         self.input_conv = LatentResBlock(latent_dim, h_dim)
         self.cond_conv = LatentResBlock(cond_dim, h_dim)
-        self.cross_attention = CrossAttention(h_dim, h_dim, heads=8, dim_head=32)
-        out_dim= h_dim // 4
-        self.out_conv = LatentResBlock(h_dim, out_dim)
+        # self.cross_attention = CrossAttention(h_dim, h_dim, heads=8, dim_head=32)
+        emb_dim = h_dim + h_dim
+
+        self.out_conv = LatentResBlock(emb_dim, emb_dim // 2)
         self.fc = nn.Sequential(
-            EqualLinear(out_dim, out_dim//4),
-            EqualLinear(out_dim//4, 1, activation=False),
+            EqualLinear(emb_dim // 2, emb_dim // 2),
+            EqualLinear(emb_dim // 2, emb_dim // 4),
+            EqualLinear(emb_dim // 4, emb_dim // 8),
+            EqualLinear(emb_dim // 8, 1, activation=False),
         )
 
     def forward(self, latent: torch.Tensor, cond_latent: torch.Tensor):
         latent = self.input_conv.forward(latent)
         cond_latent = self.cond_conv.forward(cond_latent)
-        x = self.cross_attention(latent, cond_latent)
+        x = torch.cat([latent, cond_latent], dim=1)
+
         x = self.out_conv(x)
         x = self.fc(x)
         return x

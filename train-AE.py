@@ -20,18 +20,18 @@ from tsgan.models.autoencoder import (TextureEncoder, TextureDecoder)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--obj_model', type=str, default='data/models/audi_et_te.obj')
+    parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
     parser.add_argument('--texture_size', type=int, default=4)
-    parser.add_argument('--latent_dim', type=int, default=512)
+    parser.add_argument('--latent_dim', type=int, default=2048)
     parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
     parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--save_dir', type=str, default='tmp/autoencoder')
     parser.add_argument('--save_name', type=str, default='autoencoder')
 
-    parser.add_argument('--epoches', type=int, default=4000)
+    parser.add_argument('--epoches', type=int, default=5000)
     parser.add_argument('--lr', type=float, default=0.1)
-    parser.add_argument('--milestones', type=List[int], default=[2000, 10000])
+    parser.add_argument('--milestones', type=List[int], default=[3000, 10000])
     return parser.parse_args()
 
 

@@ -70,7 +70,7 @@ def train(args):
         g_ema,
         g_optim,
         d_optim,
-        train_loader,
+        loader,
         mix_train_set,
         device,
     ) = prepare_training(args)
@@ -105,11 +105,12 @@ def train(args):
         d_module = discriminator
 
     accum = 0.5**(32 / (10 * 1000))
+    r_t_stat = 0
 
-    train_loader = sample_data(train_loader)
+    loader = sample_data(loader)
     for idx in pbar:
         i = idx + args.start_iter
-        batch_data = next(train_loader)
+        batch_data = next(loader)
 
         cond_images = batch_data["coco"]["image"].to(device)
         coco_label = batch_data["coco"]["predict_id"].to(device)
@@ -140,32 +141,32 @@ def train(args):
         real_pred = discriminator.forward(batch_texture_latent, cond_latent)
         fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
 
-        # if i % args.d_loss_every == 0:
-        #     # D logistic loss
-        #     # d_loss = d_logistic_loss(real_pred, fake_pred)
-        #     d_loss = d_logistic_loss(real_pred, fake_pred)
+        if i % args.d_loss_every == 0:
+            # D logistic loss
+            # d_loss = d_logistic_loss(real_pred, fake_pred)
+            d_loss = d_logistic_loss(real_pred, fake_pred)
 
-        #     loss_dict["d"] = d_loss
-        #     loss_dict["real_score"] = real_pred.mean()
-        #     loss_dict["fake_score"] = fake_pred.mean()
+            loss_dict["d"] = d_loss
+            loss_dict["real_score"] = real_pred.mean()
+            loss_dict["fake_score"] = fake_pred.mean()
 
-        #     # D backward
-        #     discriminator.zero_grad()
-        #     d_loss.backward()
-        #     d_optim.step()
+            # D backward
+            discriminator.zero_grad()
+            d_loss.backward()
+            d_optim.step()
 
         # ----------------------------------------
         #   D regularization for every d_reg_every iterations
         # ----------------------------------------
-        # if i % args.d_reg_every == 0:
-        #     batch_texture_latent.requires_grad = True
-        #     real_pred = discriminator(batch_texture_latent, cond_latent)
-        #     r1_loss = d_r1_loss(real_pred, batch_texture_latent)
-        #     total_reg_loss = args.r1 / 2 * r1_loss * args.d_reg_every + 0 * real_pred[0]
-        #     discriminator.zero_grad()
-        #     total_reg_loss.backward()
-        #     d_optim.step()
-        #     batch_texture_latent.requires_grad = False
+        if i % args.d_reg_every == 0:
+            batch_texture_latent.requires_grad = True
+            real_pred = discriminator(batch_texture_latent, cond_latent)
+            r1_loss = d_r1_loss(real_pred, batch_texture_latent)
+            total_reg_loss = args.r1 / 2 * r1_loss * args.d_reg_every + 0 * real_pred[0]
+            discriminator.zero_grad()
+            total_reg_loss.backward()
+            d_optim.step()
+            batch_texture_latent.requires_grad = False
 
         loss_dict["r1"] = r1_loss
 
@@ -255,18 +256,25 @@ def train(args):
             render_scenes = torch.cat(render_scene_list, dim=0).to(device)
             render_labels = torch.stack(render_label_list, dim=0).to(device)
 
+            # with torch.no_grad():
+            # RuntimeError: element 0 of tensors does not require grad and does not have a grad_fn
+            # https://www.zhihu.com/question/422373907/answer/1545222557
+            # https://github.com/MishaLaskin/vqvae/blob/d761a999e2267766400dc646d82d3ac3657771d4/models/quantizer.py#L67
             pred = detector.forward(render_images)
+            # pred = [p.detach() + render_images - render_images.detach() for p in pred]
+            # pred.grad_fn = fake_textures.grad_fn
+            # for p in pred:
+            #     p.requires_grad = True
             (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
             det_loss = lbox + lobj + lcls
-            # det_loss.backward(retain_graph=True)
+            det_loss.backward(retain_graph=True)
         loss_dict["lbox"] = lbox
         loss_dict["lobj"] = lobj
         loss_dict["lcls"] = lcls
         loss_dict["det"] = det_loss
 
         g_gen_loss = g_nonsaturating_loss(fake_pred)
-        # g_loss = g_gen_loss + 1.0 * det_loss
-        g_loss = det_loss
+        g_loss = g_gen_loss + 1.0 * det_loss
         loss_dict["g"] = g_gen_loss
         generator.zero_grad()
         g_loss.backward()
@@ -276,29 +284,27 @@ def train(args):
         #   G regularization for every g_reg_every iterations
         # ----------------------------------------
         # if i % args.g_reg_every == 0:
-        if False:
-            fake_texture_latent, latents = generator.forward(texture_latent_mix_noise, cond_latent, return_latents=True)
-            path_loss, mean_path_length, path_lengths = g_path_regularize(
-                fake_texture_latent, latents, mean_path_length
-            )
-            generator.zero_grad()
+        #     fake_texture_latent, latents = generator.forward(texture_latent_mix_noise, cond_latent, return_latents=True)
+        #     path_loss, mean_path_length, path_lengths = g_path_regularize(
+        #         fake_texture_latent, latents, mean_path_length
+        #     )
+        #     generator.zero_grad()
 
-            weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
-            # if args.path_batch_shrink:
-            #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
-            weighted_path_loss.backward()
-            g_optim.step()
-            mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
-        loss_dict["path"] = path_loss
-        loss_dict["path_length"] = path_lengths.mean()
+        #     weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
+        #     # if args.path_batch_shrink:
+        #     #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
+        #     weighted_path_loss.backward()
+        #     g_optim.step()
+        #     mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
+        # loss_dict["path"] = path_loss
+        # loss_dict["path_length"] = path_lengths.mean()
 
         # ----------------------------------------
         #  Valid
         # ----------------------------------------
         if (i % args.valid_every) == 0 and (render_scenes is not None):
             with torch.no_grad():
-                pred=detector_eval.forward(render_scenes)
-
+                pred = detector_eval.forward(render_scenes)[0]
             conf_thres, iou_thres = 0.25, 0.6
             pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
             result_imgs = []
@@ -314,6 +320,7 @@ def train(args):
                         cv2.putText(cv2_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
                 result_imgs.append(cv2_img)
+                # cv2.imwrite(os.path.join(sample_save_dir, f'detect-{idx}.png'), cv2_img)
 
             rows = cols = int(math.floor(math.log2(len(result_imgs))))
             new_num_imgs = rows * cols
@@ -325,55 +332,60 @@ def train(args):
                     concatenated_image[i * img_height :(i + 1) * img_height,
                                        j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
             cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
-            cv2.imwrite(os.path.join(sample_save_dir, f'detect-{idx}.png'), concatenated_image)
+            # cv2.imwrite(os.path.join(sample_save_dir, f'detect-{idx}.png'), concatenated_image)
+            detector.train()
+
         accumulate(g_ema, g_module, accum)
 
         loss_reduced = reduce_loss_dict(loss_dict)
 
-        # d_loss_val = loss_reduced["d"].mean().item()
+        d_loss_val = loss_reduced["d"].mean().item()
         g_loss_val = loss_reduced["g"].mean().item()
         det_loss_val = loss_reduced["det"].mean().item()
         loss_box = loss_reduced["lbox"].mean().item()
         loss_obj = loss_reduced["lobj"].mean().item()
         loss_cls = loss_reduced["lcls"].mean().item()
-        # r1_val = loss_reduced["r1"].mean().item()
+        r1_val = loss_reduced["r1"].mean().item()
         # path_loss_val = loss_reduced["path"].mean().item()
-        # real_score_val = loss_reduced["real_score"].mean().item()
-        # fake_score_val = loss_reduced["fake_score"].mean().item()
+        real_score_val = loss_reduced["real_score"].mean().item()
+        fake_score_val = loss_reduced["fake_score"].mean().item()
         # path_length_val = loss_reduced["path_length"].mean().item()
 
         if get_rank() == 0:
             pbar.set_description(
                 (
                     f"{cstr('epoch')}:{i} "
-                                                         # f"{cstr('D')}:{d_loss_val:.4f} "
-                                                         # f"{cstr('r1')}:{r1_val:.4f} "
+                    f"{cstr('D')}:{d_loss_val:.4f} "
+                    f"{cstr('r1')}:{r1_val:.4f} "
                     f"{cstr('G')}:{g_loss_val:.4f} "
                     f"{cstr('det')}:{det_loss_val:.4f} "
                     f"{cstr('lbox')}:{loss_box:.4f} "
                     f"{cstr('lobj')}:{loss_obj:.4f} "
                     f"{cstr('lcls')}:{loss_cls:.4f} "
+
                                                          # f"{cstr('path')}:{path_loss_val:.4f} "
                                                          # f"{cstr('mpath')}:{mean_path_length_avg:.4f} "
                 )
             )
-
             log_info_dict = {
+                
                 "G": g_loss_val,
-                                       # "D": d_loss_val,
+                "D": d_loss_val,
                 "Det": det_loss_val,
                 "lbox": loss_box,
                 "lobj": loss_obj,
                 "lcls": loss_cls,
-                                       # "R1": r1_val,
-                                       # "Path Length Regularization": path_loss_val,
-                                       # "Mean Path Length": mean_path_length,
-                                       # "RealScore": real_score_val,
-                                       # "FakeScore": fake_score_val,
-                                       # "Path Length": path_length_val,
+                "Rt": r_t_stat,
+                "R1": r1_val,
+                                                         # "Path Length Regularization": path_loss_val,
+                                                         # "Mean Path Length": mean_path_length,
+                "RealScore": real_score_val,
+                "FakeScore": fake_score_val,
+                                                         # "Path Length": path_length_val,
             }
 
-            log_info = ["iter:%08d" % idx] + [f"{k}:{v:.5f}" for k, v in log_info_dict.items()]
+            log_info=["iter:%08d"%idx]+[f"{k}:{v:.5f}" for k,v in log_info_dict.items()]
+            # f"iter:{idx:%05d}"
 
             logging.info(" ".join(log_info))
 
@@ -405,21 +417,12 @@ def prepare_training(args):
 
     mix_train_set = tsgan.data.CroppedCOCOCarlaMixDataset(
         'configs/dataset.yaml',
-        is_train=True,                                     # TODO: 测试完后，修改为训练 True
+        is_train=False,                                    # TODO: 测试完后，修改为训练 True
         transform=transform,
         show_detail=True,
     )
 
-    if False:
-        os.makedirs(tmp_dataset_image_save := "tmp/mix_coco", exist_ok=True)
-        for i_ds, data_dict in enumerate(mix_train_set):
-            coco_sample = data_dict["coco"]
-            cv2.imwrite(
-                f"{tmp_dataset_image_save}/{i_ds}-{coco_sample['category_name']}.png",
-                (coco_sample["image"].numpy().transpose(1, 2, 0) * 255).astype(np.uint8),
-            )
-
-    train_loader = data.DataLoader(
+    loader = data.DataLoader(
         mix_train_set,
         batch_size=args.batch,
         num_workers=args.num_workers,
@@ -467,9 +470,6 @@ def prepare_training(args):
     cond_model.load_state_dict(torch.load(args.classifier_pretrained, map_location="cpu"))
     cond_model.to(device)
 
-    # ----------------------------------------------
-    #   Detector
-    # ----------------------------------------------
     # with open(data, "r") as f:
     #     data_dict: dict = yaml.safe_load(f) # dictionary
     with open("configs/hyp.scratch-low.yaml", "r") as f:
@@ -496,12 +496,12 @@ def prepare_training(args):
     #   GAN
     # ----------------------------------------------
     generator = Generator(
-        style_dim=args.latent_dim,
-        conditiom_latent_dim=cond_model.fc.in_features,
-        n_mlp=args.n_mlp,
-        channel_multiplier=args.channel_multiplier,
+        conditiom_latent_dim=cond_model.fc.in_features, n_mlp=args.n_mlp, channel_multiplier=args.channel_multiplier
     ).to(device)
     generator.train()
+
+    discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).to(device)
+    discriminator.train()
     g_ema = Generator(
         style_dim=args.latent_dim,
         conditiom_latent_dim=cond_model.fc.in_features,
@@ -509,9 +509,6 @@ def prepare_training(args):
         channel_multiplier=args.channel_multiplier
     ).to(device)
     g_ema.train()
-    discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).to(device)
-    discriminator.train()
-
     accumulate(g_ema, generator, 0)
 
     g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
@@ -577,7 +574,7 @@ def prepare_training(args):
         g_ema,
         g_optim,
         d_optim,
-        train_loader,
+        loader,
         mix_train_set,
         device,
     )
@@ -662,9 +659,9 @@ if __name__ == "__main__":
         default=2,
         help="batch size reducing factor for the path length regularization (reduce memory consumption)"
     )
-    parser.add_argument("--d_loss_every", type=int, default=2, help="interval of the r1 regularization")
-    parser.add_argument("--d_reg_every", type=int, default=16, help="interval of the r1 regularization")
-    parser.add_argument("--g_reg_every", type=int, default=4, help="interval of the path length regularization")
+    parser.add_argument("--d_loss_every", type=int, default=32, help="interval of the r1 regularization")
+    parser.add_argument("--d_reg_every", type=int, default=128, help="interval of the r1 regularization")
+    parser.add_argument("--g_reg_every", type=int, default=8, help="interval of the path length regularization")
     parser.add_argument("--g_det_every", type=int, default=1, help="interval of the path length regularization")
     parser.add_argument("--valid_every", type=int, default=100, help="interval of the path length regularization")
     parser.add_argument("--mixing", type=float, default=0.9, help="probability of latent code mixing")
@@ -676,12 +673,15 @@ if __name__ == "__main__":
         default=2,
         help="channel multiplier factor for the model. config-f = 2, else = 1"
     )
+    parser.add_argument("--wandb", action="store_true", help="use weights and biases logging")
 
-    parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
-    # parser.add_argument('--obj_model', type=str, default='data/models/audi_et_te.obj')
-    parser.add_argument('--npoint', type=int, default=12306) # 12306, 23145
+    parser.add_argument("--augment", action="store_true", help="apply non leaking augmentation")
+
+    # parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
+    parser.add_argument('--obj_model', type=str, default='data/models/audi_et_te.obj')
+    parser.add_argument('--npoint', type=int, default=23145) # 12306, 23145
     parser.add_argument('--num_feature', type=int, default=4)
-    parser.add_argument('--latent_dim', type=int, default=2048)
+    parser.add_argument('--latent_dim', type=int, default=512)
     parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/autoencoder/autoencoder.pt')
     parser.add_argument('--classifier_pretrained', type=str, default='tmp/classifier/resnet50-4.pt')
 
