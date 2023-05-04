@@ -297,7 +297,7 @@ def train(args):
         # ----------------------------------------
         if (i % args.valid_every) == 0 and (render_scenes is not None):
             with torch.no_grad():
-                pred=detector_eval.forward(render_scenes)
+                pred = detector_eval.forward(render_scenes)
 
             conf_thres, iou_thres = 0.25, 0.6
             pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
