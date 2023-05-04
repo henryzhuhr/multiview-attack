@@ -1,4 +1,5 @@
 import argparse
+import logging
 import math
 from pathlib import Path
 import random
@@ -18,12 +19,6 @@ from tqdm import tqdm
 import yaml
 import tsgan
 from tsgan.render import NeuralRenderer
-
-try:
-    import wandb
-
-except ImportError:
-    wandb = None
 
 from tsgan.utils.distributed import (
     get_rank,
@@ -50,9 +45,17 @@ cstr = lambda s: f"\033[01;32m{s}\033[0m"
 
 
 def train(args):
-    args.npoint = 12306
-    args.num_feature = 4
-    args.latent_dim = 512
+
+    # sample_save_dir = os.path.join("tmp", args.save_dir, "sample")
+    os.makedirs(sample_save_dir := os.path.join("tmp", args.save_dir, "sample"), exist_ok=True)
+    # checkpoint_save_dir = os.path.join("tmp", args.save_dir, "checkpoint")
+    os.makedirs(checkpoint_save_dir := os.path.join("tmp", args.save_dir, "checkpoint"), exist_ok=True)
+    logging.basicConfig(
+        format='[%(levelname)s][%(asctime)s] %(message)s',
+        level=logging.INFO,
+        filename=os.path.join("tmp", args.save_dir, 'train.log'),
+        filemode='a',
+    )
 
     (
         neural_renderer,
@@ -77,9 +80,6 @@ def train(args):
         texture_latent = encoder.forward(real_texture)
         batch_real_texture = real_texture.repeat(args.batch, *[1] * (len(real_texture.size()) - 1))
         batch_texture_latent = texture_latent.repeat(args.batch, *[1] * (len(texture_latent.size()) - 1))
-
-    if get_rank() == 0 and wandb is not None and args.wandb:
-        wandb.init(project="stylegan 2")
 
     # ----------------------------------------------
     # ---> start training
@@ -106,13 +106,6 @@ def train(args):
 
     accum = 0.5**(32 / (10 * 1000))
     r_t_stat = 0
-
-    sample_z = torch.randn(args.n_sample, args.latent, device=device)
-
-    # sample_save_dir = os.path.join("tmp", args.save_dir, "sample")
-    os.makedirs(sample_save_dir := os.path.join("tmp", args.save_dir, "sample"), exist_ok=True)
-    # checkpoint_save_dir = os.path.join("tmp", args.save_dir, "checkpoint")
-    os.makedirs(checkpoint_save_dir := os.path.join("tmp", args.save_dir, "checkpoint"), exist_ok=True)
 
     loader = sample_data(loader)
     for idx in pbar:
@@ -273,15 +266,15 @@ def train(args):
             # for p in pred:
             #     p.requires_grad = True
             (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
-            det_loss = 0.05 * lbox + 1.0 * lobj + 0.5 * lcls
-            # det_loss.backward(retain_graph=True)
+            det_loss = lbox + lobj + lcls
+            det_loss.backward(retain_graph=True)
         loss_dict["lbox"] = lbox
         loss_dict["lobj"] = lobj
         loss_dict["lcls"] = lcls
         loss_dict["det"] = det_loss
 
         g_gen_loss = g_nonsaturating_loss(fake_pred)
-        g_loss = g_gen_loss + 50 * det_loss
+        g_loss = g_gen_loss + 1.0 * det_loss
         loss_dict["g"] = g_gen_loss
         generator.zero_grad()
         g_loss.backward()
@@ -374,36 +367,29 @@ def train(args):
                                                          # f"{cstr('mpath')}:{mean_path_length_avg:.4f} "
                 )
             )
+            log_info_dict = {
+                
+                "G": g_loss_val,
+                "D": d_loss_val,
+                "Det": det_loss_val,
+                "lbox": loss_box,
+                "lobj": loss_obj,
+                "lcls": loss_cls,
+                "Rt": r_t_stat,
+                "R1": r1_val,
+                                                         # "Path Length Regularization": path_loss_val,
+                                                         # "Mean Path Length": mean_path_length,
+                "RealScore": real_score_val,
+                "FakeScore": fake_score_val,
+                                                         # "Path Length": path_length_val,
+            }
 
-            if wandb and args.wandb:
-                wandb.log(
-                    {
-                        "Generator": g_loss_val,
-                        "Discriminator": d_loss_val,
-                        "Detector": det_loss_val,
-                        "Rt": r_t_stat,
-                        "R1": r1_val,
-                                                        # "Path Length Regularization": path_loss_val,
-                                                        # "Mean Path Length": mean_path_length,
-                        "Real Score": real_score_val,
-                        "Fake Score": fake_score_val,
-                                                        # "Path Length": path_length_val,
-                    }
-                )
+            log_info=["iter:%08d"%idx]+[f"{k}:{v:.5f}" for k,v in log_info_dict.items()]
+            # f"iter:{idx:%05d}"
 
-            # if i % 100 == 0:
-            #     with torch.no_grad():
-            #         g_ema.eval()
-            #         sample = g_ema(texture_latent_mix_noise,cond_latent)
-            #         # utils.save_image(
-            #         #     sample,
-            #         #     f"{sample_save_dir}/{str(i).zfill(6)}.png",
-            #         #     nrow=int(args.n_sample**0.5),
-            #         #     normalize=True,
-            #         #     range=(-1, 1),
-            #         # )
+            logging.info(" ".join(log_info))
 
-            if i % 500 == 0:
+            if i % args.valid_every == 0:
                 torch.save(
                     {
                         "g": g_module.state_dict(),
@@ -517,7 +503,7 @@ def prepare_training(args):
     discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).to(device)
     discriminator.train()
     g_ema = Generator(
-        style_dim=args.latent,
+        style_dim=args.latent_dim,
         conditiom_latent_dim=cond_model.fc.in_features,
         n_mlp=args.n_mlp,
         channel_multiplier=args.channel_multiplier
@@ -529,7 +515,17 @@ def prepare_training(args):
     d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
 
     g_optim = optim.Adam(
-        generator.parameters(),
+        [
+            {
+                'params': generator.parameters()
+            },
+            {
+                'params': encoder.parameters()
+            },
+            {
+                'params': decoder.parameters()
+            },
+        ],
         lr=args.lr * g_reg_ratio,
         betas=(0**g_reg_ratio, 0.99**g_reg_ratio),
     )
@@ -650,6 +646,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--save_dir', type=str, default='stylegan2')
     parser.add_argument("--iter", type=int, default=20000, help="total training iterations")
+    parser.add_argument("--start_iter", type=int, default=0, help="total training iterations")
     parser.add_argument("--batch", type=int, default=2, help="batch sizes for each gpus")
     parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--n_sample", type=int, default=64, help="number of the samples generated during training")
@@ -664,7 +661,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--d_loss_every", type=int, default=32, help="interval of the r1 regularization")
     parser.add_argument("--d_reg_every", type=int, default=128, help="interval of the r1 regularization")
-    parser.add_argument("--g_reg_every", type=int, default=4, help="interval of the path length regularization")
+    parser.add_argument("--g_reg_every", type=int, default=8, help="interval of the path length regularization")
     parser.add_argument("--g_det_every", type=int, default=1, help="interval of the path length regularization")
     parser.add_argument("--valid_every", type=int, default=100, help="interval of the path length regularization")
     parser.add_argument("--mixing", type=float, default=0.9, help="probability of latent code mixing")
@@ -680,8 +677,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--augment", action="store_true", help="apply non leaking augmentation")
 
-    parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
-    parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/autoencoder.pt')
+    # parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
+    parser.add_argument('--obj_model', type=str, default='data/models/audi_et_te.obj')
+    parser.add_argument('--npoint', type=int, default=23145) # 12306, 23145
+    parser.add_argument('--num_feature', type=int, default=4)
+    parser.add_argument('--latent_dim', type=int, default=512)
+    parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/autoencoder/autoencoder.pt')
     parser.add_argument('--classifier_pretrained', type=str, default='tmp/classifier/resnet50-4.pt')
 
     parser.add_argument("--local_rank", type=int, default=0)
@@ -696,9 +697,6 @@ if __name__ == "__main__":
         torch.distributed.init_process_group(backend="nccl", init_method="env://")
         synchronize()
 
-    args.latent = 512
     args.n_mlp = 8
-
-    args.start_iter = 0
 
     train(args)

@@ -10,7 +10,7 @@ export CUDA_VISIBLE_DEVICES=0,1
 export NCCL_P2P_DISABLE=1
 export OMP_NUM_THREADS=8
 
-# python -m torch.distributed.launch --nproc_per_node=2 --nnodes=1  train-AEstyle.py
+# python train-AE.py
 # python -m torch.distributed.launch --nproc_per_node=2 train-stylegan2.py \
 #     --ckpt tmp/550000.pt
 
@@ -18,6 +18,5 @@ export CUDA_VISIBLE_DEVICES=0,1
 # -m torch.distributed.launch --nproc_per_node=1 
 python train-stylegan2-condition.py  \
     --save_dir stylegan2-cropcoco_car \
-    --autoencoder_pretrained tmp/autoencoder/autoencoder-3000.pt \
-    --batch 32 --iter 800000
-
+    --autoencoder_pretrained tmp/autoencoder/autoencoder.pt \
+    --batch 16 --iter 800000

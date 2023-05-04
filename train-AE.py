@@ -15,22 +15,23 @@ import tsgan
 from tsgan.render import NeuralRenderer
 from tsgan import types
 import neural_renderer as nr
+from tsgan.models.autoencoder import (TextureEncoder, TextureDecoder)
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
+    parser.add_argument('--obj_model', type=str, default='data/models/audi_et_te.obj')
     parser.add_argument('--texture_size', type=int, default=4)
-    scence_name = 'Town10HD-point_0000-distance_000-direction_1'
-    parser.add_argument('--scence_image', type=str, default=f'tmp/data/images/{scence_name}.png')
-    parser.add_argument('--scence_label', type=str, default=f'tmp/data/labels/{scence_name}.json')
+    parser.add_argument('--latent_dim', type=int, default=512)
+    parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
+    parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--save_dir', type=str, default='tmp/autoencoder')
     parser.add_argument('--save_name', type=str, default='autoencoder')
 
-    parser.add_argument('--epoches', type=int, default=10000)
+    parser.add_argument('--epoches', type=int, default=4000)
     parser.add_argument('--lr', type=float, default=0.1)
-    parser.add_argument('--milestones', type=List[int], default=[3000, 10000])
+    parser.add_argument('--milestones', type=List[int], default=[2000, 10000])
     return parser.parse_args()
 
 
@@ -64,6 +65,7 @@ def main():
     Ts: int = args.texture_size
     with open('data/models/selected_faces.txt', 'r') as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
+        selected_faces = None
     neural_renderer = NeuralRenderer(
         args.obj_model, selected_faces=selected_faces, texture_size=Ts, image_size=800, device=args.device
     )
@@ -73,18 +75,11 @@ def main():
     print('textures: ', neural_renderer.textures.size())
 
     # Load Model
-    num_feature = 4
-    num_points = 12306
-    latent_dim = 512
-    encoder = tsgan.models.autoencoder.TextureEncoder(
-        num_feature=num_feature,
-        latent_dim=latent_dim,
-    ).to(args.device)
-    decoder = tsgan.models.autoencoder.TextureDecoder(
-        latent_dim=latent_dim,
-        num_points=num_points,
-        num_feature=num_feature,
-    ).to(args.device)
+    ts = args.texture_size
+    num_points = neural_renderer.textures.shape[1]
+    latent_dim = args.latent_dim
+    encoder = TextureEncoder(num_feature=ts, latent_dim=latent_dim).to(args.device)
+    decoder = TextureDecoder(latent_dim=latent_dim, num_points=num_points, num_feature=ts).to(args.device)
 
     criterion = nn.L1Loss().to(args.device)
 
@@ -105,7 +100,7 @@ def main():
         x = neural_renderer.textures
         optimizer.zero_grad()
         # --- forward ---
-        latent_x= encoder.forward(x)
+        latent_x = encoder.forward(x)
         rec_x = decoder.forward(latent_x)
         loss = criterion.forward(x, rec_x)
 
@@ -113,7 +108,7 @@ def main():
         loss.backward()
         optimizer.step()
         lr_scheduler.step()
-        pabr.set_description("iter:%d loss:%.8f latent: %s" % (i, expoch_loss,str(latent_x.size())))
+        pabr.set_description("iter:%d loss:%.8f latent: %s" % (i, expoch_loss, str(latent_x.size())))
 
         # if ((i < 5000) and (i % 500 == 0)) or (i % 10000 == 0):
         if i % 500 == 0:
@@ -142,11 +137,16 @@ def main():
                     render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * image[x][y]
 
             save_name = "autoencoder"
-            # cv2.imwrite(os.path.join(args.save_dir, f'{save_name}-{i}.png'), render_image)
-            # torch.save(
-            #     {'encoder':encoder.state_dict(),'decoder':decoder.state_dict(),},
-            #     os.path.join(args.save_dir, f'{args.save_name}-{i}.pt'),
-            # )
+            cv2.imwrite(os.path.join(args.save_dir, f'{save_name}.png'), render_image)
+            torch.save(
+                {'encoder':encoder.state_dict(),'decoder':decoder.state_dict(),},
+                os.path.join(args.save_dir, f'{args.save_name}.pt'),
+            )
+            cv2.imwrite(os.path.join(args.save_dir, f'{save_name}-{i}.png'), render_image)
+            torch.save(
+                {'encoder':encoder.state_dict(),'decoder':decoder.state_dict(),},
+                os.path.join(args.save_dir, f'{args.save_name}-{i}.pt'),
+            )
 
 
 if __name__ == '__main__':
