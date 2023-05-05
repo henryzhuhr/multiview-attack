@@ -77,6 +77,8 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
         self.carla_dir = carla_dir
         self.carla_label_list = carla_label_list
 
+    def __len__(self):
+        return  super().__len__()
     def __getitem__(self, index: int):
         coco_sample = super().__getitem__(index)
         # carla

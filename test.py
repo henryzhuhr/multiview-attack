@@ -12,7 +12,22 @@ from tsgan.models.stylegan2 import Discriminator
 from tsgan.utils import logheader
 import tsgan
 from tsgan.render import NeuralRenderer
-if __name__ == "__main__":
+
+
+def test_model():
+    from tsgan.models.stylegan2 import Generator
+    BS = 4
+    device = torch.device("cuda")
+    generator = Generator(1024, 2048, 8, channel_multiplier=2).to(device)
+
+    print("generator params: %.2fM" % (sum(p.numel() for p in generator.parameters() if p.requires_grad) / 1e6))
+    latent_x = torch.randn(BS, 1024).to(device)
+    latent_c = torch.randn(BS, 2048).to(device)
+    latent_y = generator.forward(latent_x, latent_c)
+    print(latent_y.size())
+
+
+def test_dataset():
     device = torch.device("cuda")
     dataset = CroppedCOCOCarlaMixDataset(
         "configs/dataset.yaml",
@@ -100,3 +115,7 @@ if __name__ == "__main__":
                     alpha = alpha_channel[x][y]
                     render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * carla_scene_image[x][y]
             cv2.imwrite(os.path.join("tmp/stylegan2-cropcoco_car-0423_1438/sample", f'render.png'), render_image)
+
+
+if __name__ == "__main__":
+    test_model()

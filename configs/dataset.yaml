@@ -4,10 +4,10 @@ coco:
   train_annotation_file: instances_train2017.json
   val_annotation_file: instances_val2017.json
   categories:
-  #   - car
+    # - car
     - tv
-  #   - bowl
-  #   - truck
-  #   - laptop
+    - bowl
+    - truck
+    - laptop
 carla:
   root: tmp/data

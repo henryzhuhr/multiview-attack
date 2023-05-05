@@ -130,7 +130,7 @@ def train(args):
                 fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
 
                 real_pred = discriminator.forward(batch_texture_latent, cond_latent)
-                fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
+                fake_pred = discriminator.forward(fake_texture_latent.detach(), cond_latent)
 
                 is_d_loss = i_mini_batch % args.d_loss_every == 0
                 if is_d_loss:
@@ -141,7 +141,6 @@ def train(args):
                     loss_real_epoch += real_score
                     fake_score = fake_pred.mean().item()
                     loss_fake_epoch += fake_score
-
 
                 fake_textures = decoder.forward(fake_texture_latent)
                 render_image_list, render_scene_list, render_label_list = [], [], []
@@ -177,7 +176,9 @@ def train(args):
                     render_scene_list.append(t_render_image.unsqueeze(0))
 
                     # find object label
-                    ret, binary = cv2.threshold(cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)
+                    ret, binary = cv2.threshold(
+                        cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY
+                    )
                     contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
                     find_boxes = []
                     for c in contours:
@@ -267,30 +268,29 @@ def train(args):
             #   G regularization for every g_reg_every iterations
             # ----------------------------------------
             # if i_mini_batch % args.g_reg_every == 0:
-            if False:
-                fake_texture_latent, latents = generator.forward(
-                    texture_latent_mix_noise, cond_latent, return_latents=True
-                )
-                path_loss, mean_path_length, path_lengths = g_path_regularize(
-                    fake_texture_latent, latents, mean_path_length
-                )
-                generator.zero_grad()
+            #     fake_texture_latent, latents = generator.forward(
+            #         texture_latent_mix_noise, cond_latent, return_latents=True
+            #     )
+            #     path_loss, mean_path_length, path_lengths = g_path_regularize(
+            #         fake_texture_latent, latents, mean_path_length
+            #     )
+            #     generator.zero_grad()
 
-                weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
-                # if args.path_batch_shrink:
-                #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
-                weighted_path_loss.backward()
-                g_optim.step()
-                mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
-                loss_dict["path"] = path_loss
-                loss_dict["path_length"] = path_lengths.mean()
+            #     weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
+            #     # if args.path_batch_shrink:
+            #     #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
+            #     weighted_path_loss.backward()
+            #     g_optim.step()
+            #     mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
+            #     loss_dict["path"] = path_loss
+            #     loss_dict["path_length"] = path_lengths.mean()
 
             accumulate(g_ema, generator, accum)
             # ----------------------------------------
             #  Valid
             # ----------------------------------------
             if (i_mini_batch % args.valid_every) == 0 and (render_scenes is not None):
-                detector.eval()
+                
                 with torch.no_grad():
                     pred = detector.forward(render_scenes)
 
@@ -320,10 +320,10 @@ def train(args):
                                                    j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
                     cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
                     cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_mini_batch}.png'), concatenated_image)
-                detector.train()
 
-            
-            
+
+
+
             pbar.set_description(" ".join((
                 f"{cstr('G')}:{g_gen_loss.item():.4f}",
                 f"{cstr('D')}:{d_loss.item():.4f}",
@@ -342,13 +342,13 @@ def train(args):
             epoch_loss_dict = {
                 "G": g_loss_epoch / data_num,
                 "D": loss_d_epoch / data_num * args.d_loss_every,
-                "Rs": loss_real_epoch / data_num * args.d_loss_every,
-                "Fs": loss_fake_epoch / data_num * args.d_loss_every,
-                "R1": loss_r1_epoch / data_num * args.d_reg_every,
                 "Det": det_loss_epoch / data_num,
                 "lbox": lbox_epoch / data_num,
                 "lobj": lobj_epoch / data_num,
                 "lcls": lcls_epoch / data_num,
+                "Rs": loss_real_epoch / data_num * args.d_loss_every,
+                "Fs": loss_fake_epoch / data_num * args.d_loss_every,
+                "R1": loss_r1_epoch / data_num * args.d_reg_every,
             }
 
             log_info = " ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()])
@@ -374,20 +374,18 @@ def prepare_training(args):
     # ----------------------------------------------
     #   Load Data
     # ----------------------------------------------
-    transform = transforms.Compose(
-        [
-            transforms.RandomHorizontalFlip(),
-            transforms.Resize([224, 224]),
-            transforms.ToTensor(),
-        ]
-    )
 
     mix_train_set = tsgan.data.CroppedCOCOCarlaMixDataset(
         'configs/dataset.yaml',
-        is_train=True,                                     # TODO: 测试完后，False 修改为训练 True
-        transform=transform,
+        is_train=False,                                    # TODO: 测试完后, False 修改为训练 True
         show_detail=True,
-    )
+        # load_all_class=True,
+        transform=transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.Resize([224, 224]),
+                transforms.ToTensor(),
+        ]),
+    )# yapf:disable
 
     if False:
         os.makedirs(tmp_dataset_image_save := "tmp/mix_coco", exist_ok=True)
