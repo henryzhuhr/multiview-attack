@@ -1,4 +1,5 @@
 import argparse
+from copy import deepcopy
 import logging
 import math
 from pathlib import Path
@@ -6,6 +7,7 @@ import random
 import os
 import sys
 import cv2
+import datetime
 
 import numpy as np
 import neural_renderer as nr
@@ -14,7 +16,9 @@ from torch import Tensor, nn, autograd, optim
 from torch.nn import functional as F
 from torch.utils import data
 import torch.distributed as dist
+from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms, utils
+
 from tqdm import tqdm
 import yaml
 import tsgan
@@ -42,6 +46,10 @@ from utils.loss import ComputeLoss
 from utils.general import non_max_suppression, scale_boxes
 
 cstr = lambda s: f"\033[01;32m{s}\033[0m"
+nowt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 
 def train(args):
@@ -53,338 +61,309 @@ def train(args):
     logging.basicConfig(
         format='[%(levelname)s][%(asctime)s] %(message)s',
         level=logging.INFO,
-        filename=os.path.join("tmp", args.save_dir, 'train.log'),
+        filename=os.path.join("tmp", args.save_dir, f'train-{nowt}.log'),
         filemode='a',
     )
 
     (
-        neural_renderer,
-        encoder,
-        decoder,
-        cond_model,
-        detector,
-        detector_eval,
-        compute_detector_loss,
-        generator,
-        discriminator,
-        g_ema,
-        g_optim,
-        d_optim,
-        train_loader,
-        mix_train_set,
-        device,
+        neural_renderer, encoder, decoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
+        discriminator, g_ema, g_optim, d_optim, scaler, train_loader, mix_train_set, device
     ) = prepare_training(args)
 
     with torch.no_grad():
         real_texture = neural_renderer.textures
         texture_latent = encoder.forward(real_texture)
-        batch_real_texture = real_texture.repeat(args.batch, *[1] * (len(real_texture.size()) - 1))
         batch_texture_latent = texture_latent.repeat(args.batch, *[1] * (len(texture_latent.size()) - 1))
 
     # ----------------------------------------------
-    # ---> start training
-    pbar = range(args.iter)
-    if get_rank() == 0:
-        pbar = tqdm(pbar, initial=args.start_iter, dynamic_ncols=True, smoothing=0.01)
+    #   start training
+    # ----------------------------------------------
+    for epoch in range(args.epochs):
+        clr = g_optim.state_dict()['param_groups'][0]['lr']
+        print(
+            "\033[32m",
+            f"[Epoch]{epoch}/{args.epochs}",
+            f"[Batch Size]{args.batch}",
+            f"[LR]{g_optim.state_dict()['param_groups'][0]['lr']:.6f}",
+            f":{device}",
+            "\033[0m",
+        )
 
-    mean_path_length = 0
+        g_loss_epoch = 0
+        loss_d_epoch, loss_real_epoch, loss_fake_epoch = 0, 0, 0
+        loss_r1_epoch = 0
+        lbox_epoch, lobj_epoch, lcls_epoch = 0, 0, 0
+        det_loss_epoch = 0
+        data_num = 0
 
-    d_loss_val = 0
-    r1_loss = torch.tensor(0.0, device=device)
-    g_loss_val = 0
-    path_loss = torch.tensor(0.0, device=device)
-    path_lengths = torch.tensor(0.0, device=device)
-    mean_path_length_avg = 0
-    loss_dict = {}
+        accum = 0.5**(32 / (10 * 1000))
 
-    if args.distributed:
-        g_module = generator.module
-        d_module = discriminator.module
-    else:
-        g_module = generator
-        d_module = discriminator
+        pbar = tqdm(train_loader)
+        for i_mini_batch, batch_data in enumerate(pbar):
+            cond_images = batch_data["coco"]["image"].to(device)
+            coco_label = batch_data["coco"]["predict_id"].to(device)
+            carla_scene_images = batch_data["carla"]["image"]
+            carla_render_params = batch_data["carla"]["render_param"]
+            BS = cond_images.shape[0]
+            data_num += BS
 
-    accum = 0.5**(32 / (10 * 1000))
+            # ----------------------------------------
+            # perform backward
+            # ----------------------------------------
+            texture_latent_mix_noise = batch_texture_latent.clone()
+            for i_b in range(BS):
+                noise_rotio = 1
+                noise = torch.randn_like(texture_latent_mix_noise[i_b])
+                texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
 
-    train_loader = sample_data(train_loader)
-    for idx in pbar:
-        i = idx + args.start_iter
-        batch_data = next(train_loader)
-
-        cond_images = batch_data["coco"]["image"].to(device)
-        coco_label = batch_data["coco"]["predict_id"].to(device)
-
-        carla_scene_images = batch_data["carla"]["image"]
-        carla_render_params = batch_data["carla"]["render_param"]
-
-        requires_grad(generator, False)
-        requires_grad(discriminator, True)
-
-        # ----------------------------------------
-        # perform backward
-        # ----------------------------------------
-        texture_latent_mix_noise = batch_texture_latent.clone()
-        for i_b in range(args.batch):
-            noise_rotio = 0.5
-            noise = torch.randn_like(texture_latent_mix_noise[i_b])
-            texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
-
-        with torch.no_grad():
-            cond_latent = cond_model.forward_latent(cond_images)
-
-        # ----------------------------------------
-        # perform backward
-        # ----------------------------------------
-        fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-
-        real_pred = discriminator.forward(batch_texture_latent, cond_latent)
-        fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
-
-        # if i % args.d_loss_every == 0:
-        #     # D logistic loss
-        #     # d_loss = d_logistic_loss(real_pred, fake_pred)
-        #     d_loss = d_logistic_loss(real_pred, fake_pred)
-
-        #     loss_dict["d"] = d_loss
-        #     loss_dict["real_score"] = real_pred.mean()
-        #     loss_dict["fake_score"] = fake_pred.mean()
-
-        #     # D backward
-        #     discriminator.zero_grad()
-        #     d_loss.backward()
-        #     d_optim.step()
-
-        # ----------------------------------------
-        #   D regularization for every d_reg_every iterations
-        # ----------------------------------------
-        # if i % args.d_reg_every == 0:
-        #     batch_texture_latent.requires_grad = True
-        #     real_pred = discriminator(batch_texture_latent, cond_latent)
-        #     r1_loss = d_r1_loss(real_pred, batch_texture_latent)
-        #     total_reg_loss = args.r1 / 2 * r1_loss * args.d_reg_every + 0 * real_pred[0]
-        #     discriminator.zero_grad()
-        #     total_reg_loss.backward()
-        #     d_optim.step()
-        #     batch_texture_latent.requires_grad = False
-
-        loss_dict["r1"] = r1_loss
-
-        # frozen D
-        requires_grad(generator, True)
-        requires_grad(discriminator, False)
-
-        # G backward
-        # fake_texture = generator.forward(texture_latent_mix_noise, cond_latent)
-        fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-        fake_pred = discriminator(fake_texture_latent, cond_latent)
-
-        det_loss, lbox, lobj, lcls = 0, 0, 0, 0
-        if i % args.g_det_every == 0:
             with torch.no_grad():
+                cond_latent = cond_model.forward_latent(cond_images)
+
+            requires_grad(generator, False)
+            requires_grad(discriminator, True)
+            requires_grad(detector, False)
+
+            # ----------------------------------------
+            # perform backward
+            # ----------------------------------------
+            with autocast():
+                fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
+
+                real_pred = discriminator.forward(batch_texture_latent, cond_latent)
+                fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
+
+                is_d_loss = i_mini_batch % args.d_loss_every == 0
+                if is_d_loss:
+                    d_loss = d_logistic_loss(real_pred, fake_pred) # D logistic loss
+
+                    loss_d_epoch += d_loss.item()
+                    real_score = real_pred.mean().item()
+                    loss_real_epoch += real_score
+                    fake_score = fake_pred.mean().item()
+                    loss_fake_epoch += fake_score
+
+
                 fake_textures = decoder.forward(fake_texture_latent)
+                render_image_list, render_scene_list, render_label_list = [], [], []
 
-            render_image_list = []
-            render_scene_list = []
-            render_label_list = []
-            scene_label_list = [] # scene image with label to check
-            for i_b in range(fake_textures.size(0)):
-                carla_scene_image = carla_scene_images[i_b]
-                carla_render_param = carla_render_params[i_b]
-                fake_texture = fake_textures[i_b].unsqueeze(0)
-                tm = neural_renderer.textures_mask
-                render_texture = tm * fake_texture + (1 - tm) * neural_renderer.textures
+                for i_b in range(fake_textures.size(0)):
+                    carla_scene_image = carla_scene_images[i_b]
+                    carla_render_param = carla_render_params[i_b]
+                    fake_texture = fake_textures[i_b].unsqueeze(0)
+                    tm = neural_renderer.textures_mask
+                    render_texture = tm * fake_texture + (1 - tm) * neural_renderer.textures
 
-                neural_renderer.set_render_perspective(
-                    carla_render_param["camera_transform"], carla_render_param["vehicle_transform"],
-                    carla_render_param["fov"]
-                )
-                (rgb_images, depth_images, alpha_images) = neural_renderer.renderer.forward(
-                    neural_renderer.vertices, neural_renderer.faces, torch.tanh(render_texture)
-                )
+                    neural_renderer.set_render_perspective(
+                        carla_render_param["camera_transform"], carla_render_param["vehicle_transform"],
+                        carla_render_param["fov"]
+                    )
+                    (rgb_images, depth_images, alpha_images) = neural_renderer.renderer.forward(
+                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(render_texture)
+                    )
 
-                t_rgb_image = rgb_images.squeeze(0)
-                t_alpha_image = alpha_images
-                t_scene_image = torch.from_numpy(carla_scene_image).to(t_rgb_image.device).permute(2, 0, 1).float() / 255.  # yapf: disable
-                t_render_image = t_alpha_image * t_rgb_image + (1 - t_alpha_image) * t_scene_image
+                    t_rgb_image = rgb_images.squeeze(0)
+                    t_alpha_image = alpha_images
+                    t_scene_image = torch.from_numpy(carla_scene_image).to(t_rgb_image.device).permute(2, 0, 1).float() / 255.  # yapf: disable
+                    t_render_image = t_alpha_image * t_rgb_image + (1 - t_alpha_image) * t_scene_image
 
-                render_npimg: np.ndarray = t_rgb_image.detach().cpu().numpy() * 255
-                render_npimg = render_npimg.astype(np.uint8).transpose(1, 2, 0)
+                    render_npimg: np.ndarray = t_rgb_image.detach().cpu().numpy() * 255
+                    render_npimg = render_npimg.astype(np.uint8).transpose(1, 2, 0)
 
-                scene_npimg: np.ndarray = t_render_image.detach().cpu().numpy() * 255
-                scene_npimg = scene_npimg.astype(np.uint8).transpose(1, 2, 0)
-                scene_npimg = np.ascontiguousarray(scene_npimg)
+                    scene_npimg: np.ndarray = t_render_image.detach().cpu().numpy() * 255
+                    scene_npimg = scene_npimg.astype(np.uint8).transpose(1, 2, 0)
+                    scene_npimg = np.ascontiguousarray(scene_npimg)
 
-                # if i_b == 0:
-                #     cv2.imwrite(os.path.join(sample_save_dir, f'render.png'), render_npimg)
+                    render_image_list.append(t_rgb_image.unsqueeze(0))
+                    render_scene_list.append(t_render_image.unsqueeze(0))
 
-                render_image_list.append(t_rgb_image.unsqueeze(0))
-                render_scene_list.append(t_render_image.unsqueeze(0))
+                    # find object label
+                    ret, binary = cv2.threshold(cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)
+                    contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                    find_boxes = []
+                    for c in contours:
+                        [x, y, w, h] = cv2.boundingRect(c)
+                        find_boxes.append([x, y, x + w, y + h])
+                    fc = np.array(find_boxes)
+                    box = [min(fc[:, 0]), min(fc[:, 1]), max(fc[:, 2]), max(fc[:, 3])] # [x1,y1,x2,y2]
 
-                # find object label
-                ret, binary = cv2.threshold(cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)
-                contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-                find_boxes = []
-                for c in contours:
-                    [x, y, w, h] = cv2.boundingRect(c)
-                    find_boxes.append([x, y, x + w, y + h])
-                fc = np.array(find_boxes)
-                box = [min(fc[:, 0]), min(fc[:, 1]), max(fc[:, 2]), max(fc[:, 3])] # [x1,y1,x2,y2]
+                    if False:
+                        [x1, y1, x2, y2] = box
+                        cv2.rectangle(scene_npimg, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-                if False:
-                    [x1, y1, x2, y2] = box
-                    cv2.rectangle(scene_npimg, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        label = mix_train_set.COCO_CLASS[int(coco_label[i_b])]
+                        cv2.putText(scene_npimg, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                    label = mix_train_set.COCO_CLASS[int(coco_label[i_b])]
-                    cv2.putText(scene_npimg, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                        cv2.imwrite(os.path.join(sample_save_dir, f'render.png'), scene_npimg)
+                        # cv2.imwrite(os.path.join(sample_save_dir, f'render-{idx}.png'), scene_npimg)
 
-                    cv2.imwrite(os.path.join(sample_save_dir, f'render.png'), scene_npimg)
-                    # cv2.imwrite(os.path.join(sample_save_dir, f'render-{idx}.png'), scene_npimg)
+                    # YOLOv5 label: [image_idx, class, x_center, y_center, width, height]
+                    # why image_idx: [#253](https://github.com/ultralytics/yolov3/issues/253)
+                    # see [collate_fn](https://github.com/ultralytics/yolov5/blob/8ecc7276ecdd9c409b3dc8b9051142569009c6f4/utils/dataloaders.py#LL890C17-L890C21)
+                    c, h, w = t_rgb_image.shape
+                    render_label_list.append(torch.tensor([
+                        i_b, int(coco_label[i_b]),
+                        (box[0] + box[2]) / 2 / w,
+                        (box[1] + box[3]) / 2 / h,
+                        (box[2] - box[0]) / w,
+                        (box[3] - box[1]) / h,
+                    ])) # yapf:disable
+                render_images = torch.cat(render_image_list, dim=0).to(device)
+                render_scenes = torch.cat(render_scene_list, dim=0).to(device)
+                render_labels = torch.stack(render_label_list, dim=0).to(device)
 
-                # YOLOv5 label: [image_idx, class, x_center, y_center, width, height]
-                # why image_idx: [#253](https://github.com/ultralytics/yolov3/issues/253)
-                # see [collate_fn](https://github.com/ultralytics/yolov5/blob/8ecc7276ecdd9c409b3dc8b9051142569009c6f4/utils/dataloaders.py#LL890C17-L890C21)
-                c, h, w = t_rgb_image.shape
-                render_label_list.append(torch.tensor([
-                    i_b, int(coco_label[i_b]),
-                    (box[0] + box[2]) / 2 / w,
-                    (box[1] + box[3]) / 2 / h,
-                    (box[2] - box[0]) / w,
-                    (box[3] - box[1]) / h,
-                ])) # yapf:disable
-            render_images = torch.cat(render_image_list, dim=0).to(device)
-            render_scenes = torch.cat(render_scene_list, dim=0).to(device)
-            render_labels = torch.stack(render_label_list, dim=0).to(device)
+                pred = detector.forward(render_images)
+                (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
 
-            pred = detector.forward(render_images)
-            (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
-            det_loss = lbox + lobj + lcls
-            # det_loss.backward(retain_graph=True)
-        loss_dict["lbox"] = lbox
-        loss_dict["lobj"] = lobj
-        loss_dict["lcls"] = lcls
-        loss_dict["det"] = det_loss
+                lbox_epoch += lbox.item() * BS
+                lobj_epoch += lobj.item() * BS
+                lcls_epoch += lcls.item() * BS
+                det_loss_epoch += det_loss.item() * BS
+                d_loss = det_loss + d_loss if is_d_loss else det_loss
 
-        g_gen_loss = g_nonsaturating_loss(fake_pred)
-        # g_loss = g_gen_loss + 1.0 * det_loss
-        g_loss = det_loss
-        loss_dict["g"] = g_gen_loss
-        generator.zero_grad()
-        g_loss.backward()
-        g_optim.step()
+            # D backward
+            discriminator.zero_grad()
+            d_loss.backward()
+            d_optim.step()
 
-        # ----------------------------------------
-        #   G regularization for every g_reg_every iterations
-        # ----------------------------------------
-        # if i % args.g_reg_every == 0:
-        if False:
-            fake_texture_latent, latents = generator.forward(texture_latent_mix_noise, cond_latent, return_latents=True)
-            path_loss, mean_path_length, path_lengths = g_path_regularize(
-                fake_texture_latent, latents, mean_path_length
-            )
+            # ----------------------------------------
+            #   D regularization for every d_reg_every iterations
+            # ----------------------------------------
+            r1_loss = 0
+            if i_mini_batch % args.d_reg_every == 0:
+                batch_texture_latent.requires_grad = True
+                real_pred = discriminator(batch_texture_latent, cond_latent)
+                r1_loss = d_r1_loss(real_pred, batch_texture_latent) * args.d_reg_every * args.r1 / 2
+
+                loss_r1_epoch += r1_loss.item()
+
+                discriminator.zero_grad()
+                scaler.scale(r1_loss).backward()
+                # r1_loss.backward()
+                scaler.step(d_optim)
+                # d_optim.step()
+                scaler.update()
+                batch_texture_latent.requires_grad = False
+
+            # frozen D
+            requires_grad(generator, True)
+            requires_grad(discriminator, False)
+
+            # G backward
+            # fake_texture = generator.forward(texture_latent_mix_noise, cond_latent)
+            with autocast():
+                fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
+                fake_pred = discriminator(fake_texture_latent, cond_latent)
+                g_gen_loss = g_nonsaturating_loss(fake_pred)
+                g_loss = g_gen_loss
+
             generator.zero_grad()
+            # g_loss.backward()
+            scaler.scale(g_loss).backward()
+            # g_optim.step()
+            scaler.step(g_optim)
+            scaler.update()
 
-            weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
-            # if args.path_batch_shrink:
-            #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
-            weighted_path_loss.backward()
-            g_optim.step()
-            mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
-        loss_dict["path"] = path_loss
-        loss_dict["path_length"] = path_lengths.mean()
-
-        # ----------------------------------------
-        #  Valid
-        # ----------------------------------------
-        if (i % args.valid_every) == 0 and (render_scenes is not None):
-            with torch.no_grad():
-                pred = detector_eval.forward(render_scenes)
-
-            conf_thres, iou_thres = 0.25, 0.6
-            pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
-            result_imgs = []
-            for i_b, det in enumerate(pred):
-                cv2_img = np.ascontiguousarray(render_scenes[i_b].cpu().numpy().transpose(1, 2, 0) * 255).astype(
-                    np.uint8
+            # ----------------------------------------
+            #   G regularization for every g_reg_every iterations
+            # ----------------------------------------
+            # if i_mini_batch % args.g_reg_every == 0:
+            if False:
+                fake_texture_latent, latents = generator.forward(
+                    texture_latent_mix_noise, cond_latent, return_latents=True
                 )
-                if len(det):
-                    for *xyxy, conf, cls in det:
-                        label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
-                        x1, y1, x2, y2 = [int(xy) for xy in xyxy]
-                        cv2.rectangle(cv2_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        cv2.putText(cv2_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                path_loss, mean_path_length, path_lengths = g_path_regularize(
+                    fake_texture_latent, latents, mean_path_length
+                )
+                generator.zero_grad()
 
-                result_imgs.append(cv2_img)
+                weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
+                # if args.path_batch_shrink:
+                #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
+                weighted_path_loss.backward()
+                g_optim.step()
+                mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
+                loss_dict["path"] = path_loss
+                loss_dict["path_length"] = path_lengths.mean()
 
-            rows = cols = int(math.floor(math.log2(len(result_imgs))))
-            new_num_imgs = rows * cols
-            img_height, img_width = result_imgs[0].shape[: 2]
-            concatenated_image = np.zeros((img_height * rows, img_width * cols, 3), dtype=np.uint8)
-            for i in range(rows):
-                for j in range(cols):
-                    img_idx = i * cols + j
-                    concatenated_image[i * img_height :(i + 1) * img_height,
-                                       j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
-            cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
-            cv2.imwrite(os.path.join(sample_save_dir, f'detect-{idx}.png'), concatenated_image)
-        accumulate(g_ema, g_module, accum)
+            accumulate(g_ema, generator, accum)
+            # ----------------------------------------
+            #  Valid
+            # ----------------------------------------
+            if (i_mini_batch % args.valid_every) == 0 and (render_scenes is not None):
+                detector.eval()
+                with torch.no_grad():
+                    pred = detector.forward(render_scenes)
 
-        loss_reduced = reduce_loss_dict(loss_dict)
+                    conf_thres, iou_thres = 0.25, 0.6
+                    pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
+                    result_imgs = []
+                    for i_b, det in enumerate(pred):
+                        cv2_img = np.ascontiguousarray(render_scenes[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
+                        if len(det):
+                            for *xyxy, conf, cls in det:
+                                label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
+                                x1, y1, x2, y2 = [int(xy) for xy in xyxy]
+                                cv2.rectangle(cv2_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                                cv2.putText(cv2_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-        # d_loss_val = loss_reduced["d"].mean().item()
-        g_loss_val = loss_reduced["g"].mean().item()
-        det_loss_val = loss_reduced["det"].mean().item()
-        loss_box = loss_reduced["lbox"].mean().item()
-        loss_obj = loss_reduced["lobj"].mean().item()
-        loss_cls = loss_reduced["lcls"].mean().item()
-        # r1_val = loss_reduced["r1"].mean().item()
-        # path_loss_val = loss_reduced["path"].mean().item()
-        # real_score_val = loss_reduced["real_score"].mean().item()
-        # fake_score_val = loss_reduced["fake_score"].mean().item()
-        # path_length_val = loss_reduced["path_length"].mean().item()
+                        result_imgs.append(cv2_img)
+
+                    rows = cols = int(math.log2(len(result_imgs)))
+                    new_num_imgs = rows * cols
+                    img_height, img_width = result_imgs[0].shape[: 2]
+                    concatenated_image = np.zeros((img_height * rows, img_width * cols, 3), dtype=np.uint8)
+                    for i in range(rows):
+                        for j in range(cols):
+                            img_idx = i * cols + j
+                            if img_idx < len(result_imgs):
+                                concatenated_image[i * img_height :(i + 1) * img_height,
+                                                   j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
+                    cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
+                    cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_mini_batch}.png'), concatenated_image)
+                detector.train()
+
+            
+            
+            pbar.set_description(" ".join((
+                f"{cstr('G')}:{g_gen_loss.item():.4f}",
+                f"{cstr('D')}:{d_loss.item():.4f}",
+                f"{cstr('det')}:{det_loss.item():.4f}",
+                f"{cstr('lbox')}:{lbox.item():.4f}",
+                f"{cstr('lobj')}:{lobj.item():.4f}",
+                f"{cstr('lcls')}:{lcls.item():.4f}",
+                f"{cstr('Rs')}:{real_score:.4f}" if is_d_loss else "",
+                f"{cstr('Fs')}:{fake_score:.4f}" if is_d_loss else "",
+                f"{cstr('R1')}:{r1_loss.item():.4f}" if (i_mini_batch % args.d_reg_every == 0) else "",
+            )))# yapf:disable
+
+
 
         if get_rank() == 0:
-            pbar.set_description(
-                (
-                    f"{cstr('epoch')}:{i} "
-                                                         # f"{cstr('D')}:{d_loss_val:.4f} "
-                                                         # f"{cstr('r1')}:{r1_val:.4f} "
-                    f"{cstr('G')}:{g_loss_val:.4f} "
-                    f"{cstr('det')}:{det_loss_val:.4f} "
-                    f"{cstr('lbox')}:{loss_box:.4f} "
-                    f"{cstr('lobj')}:{loss_obj:.4f} "
-                    f"{cstr('lcls')}:{loss_cls:.4f} "
-                                                         # f"{cstr('path')}:{path_loss_val:.4f} "
-                                                         # f"{cstr('mpath')}:{mean_path_length_avg:.4f} "
-                )
-            )
-
-            log_info_dict = {
-                "G": g_loss_val,
-                                       # "D": d_loss_val,
-                "Det": det_loss_val,
-                "lbox": loss_box,
-                "lobj": loss_obj,
-                "lcls": loss_cls,
-                                       # "R1": r1_val,
-                                       # "Path Length Regularization": path_loss_val,
-                                       # "Mean Path Length": mean_path_length,
-                                       # "RealScore": real_score_val,
-                                       # "FakeScore": fake_score_val,
-                                       # "Path Length": path_length_val,
+            epoch_loss_dict = {
+                "G": g_loss_epoch / data_num,
+                "D": loss_d_epoch / data_num * args.d_loss_every,
+                "Rs": loss_real_epoch / data_num * args.d_loss_every,
+                "Fs": loss_fake_epoch / data_num * args.d_loss_every,
+                "R1": loss_r1_epoch / data_num * args.d_reg_every,
+                "Det": det_loss_epoch / data_num,
+                "lbox": lbox_epoch / data_num,
+                "lobj": lobj_epoch / data_num,
+                "lcls": lcls_epoch / data_num,
             }
 
-            log_info = ["iter:%08d" % idx] + [f"{k}:{v:.5f}" for k, v in log_info_dict.items()]
-
-            logging.info(" ".join(log_info))
+            log_info = " ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()])
+            logging.info(log_info)
+            print(log_info)
+            print()
 
             if i % args.valid_every == 0:
                 torch.save(
                     {
-                        "g": g_module.state_dict(),
-                        "d": d_module.state_dict(),
-                        "g_ema": g_ema.state_dict(),
+                        "g": generator.state_dict(),
+                                                                   # "d": d_module.state_dict(),
+                                                                   # "g_ema": g_ema.state_dict(),
                         "g_optim": g_optim.state_dict(),
-                        "d_optim": d_optim.state_dict(),
+                                                                   # "d_optim": d_optim.state_dict(),
                         "args": args,
                     },
                     f"{checkpoint_save_dir}/{str(i).zfill(6)}.pt",
@@ -405,7 +384,7 @@ def prepare_training(args):
 
     mix_train_set = tsgan.data.CroppedCOCOCarlaMixDataset(
         'configs/dataset.yaml',
-        is_train=True,                                     # TODO: 测试完后，修改为训练 True
+        is_train=True,                                     # TODO: 测试完后，False 修改为训练 True
         transform=transform,
         show_detail=True,
     )
@@ -450,12 +429,12 @@ def prepare_training(args):
     encoder = tsgan.models.autoencoder.TextureEncoder(
         num_feature=args.num_feature,
         latent_dim=args.latent_dim,
-    ).to(device)
+    ).cuda()
     decoder = tsgan.models.autoencoder.TextureDecoder(
         latent_dim=args.latent_dim,
         num_points=args.npoint,
         num_feature=args.num_feature,
-    ).to(device)
+    ).cuda()
     autoencoder_pretrained = torch.load(args.autoencoder_pretrained, map_location="cpu")
     encoder.load_state_dict(autoencoder_pretrained['encoder'])
     decoder.load_state_dict(autoencoder_pretrained['decoder'])
@@ -465,7 +444,7 @@ def prepare_training(args):
         mix_train_set.COCO_CATEGORIES_MAP.__len__(),
     )
     cond_model.load_state_dict(torch.load(args.classifier_pretrained, map_location="cpu"))
-    cond_model.to(device)
+    cond_model.cuda().eval()
 
     # ----------------------------------------------
     #   Detector
@@ -484,13 +463,7 @@ def prepare_training(args):
     detector.load_state_dict(csd, strict=False)                                                  # load
     detector.train()
 
-    detector_eval = Model("configs/yolov5s.yaml", ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)
-    detector_eval.nc = nc
-    detector_eval.hyp = hyp
-    ckpt = torch.load("pretrained/yolov5s.pt", map_location='cpu')
-    csd = ckpt['model'].float().state_dict()
-    detector_eval.load_state_dict(csd, strict=False)
-    detector_eval.eval()
+    detector_eval = None
 
     # ----------------------------------------------
     #   GAN
@@ -500,35 +473,28 @@ def prepare_training(args):
         conditiom_latent_dim=cond_model.fc.in_features,
         n_mlp=args.n_mlp,
         channel_multiplier=args.channel_multiplier,
-    ).to(device)
+        mix_prob=args.mix_prob,
+    ).cuda()
     generator.train()
     g_ema = Generator(
         style_dim=args.latent_dim,
         conditiom_latent_dim=cond_model.fc.in_features,
         n_mlp=args.n_mlp,
-        channel_multiplier=args.channel_multiplier
-    ).to(device)
+        channel_multiplier=args.channel_multiplier,
+        mix_prob=args.mix_prob,
+    ).cuda()
     g_ema.train()
     discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).to(device)
     discriminator.train()
 
+    scaler = GradScaler() # mixed precision training
     accumulate(g_ema, generator, 0)
 
     g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
     d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
 
     g_optim = optim.Adam(
-        [
-            {
-                'params': generator.parameters()
-            },
-            {
-                'params': encoder.parameters()
-            },
-            {
-                'params': decoder.parameters()
-            },
-        ],
+        generator.parameters(),
         lr=args.lr * g_reg_ratio,
         betas=(0**g_reg_ratio, 0.99**g_reg_ratio),
     )
@@ -538,48 +504,21 @@ def prepare_training(args):
         betas=(0**d_reg_ratio, 0.99**d_reg_ratio),
     )
 
-    if args.ckpt is not None:
-        print("load model:", args.ckpt)
+    # if args.ckpt is not None:
+    #     print("load model:", args.ckpt)
 
-        ckpt = torch.load(args.ckpt, map_location=lambda storage, loc: storage)
+    #     ckpt = torch.load(args.ckpt, map_location=lambda storage, loc: storage)
 
-        generator.load_state_dict(ckpt["g"], strict=False)
-        discriminator.load_state_dict(ckpt["d"], strict=False)
-        g_ema.load_state_dict(ckpt["g_ema"], strict=False)
+    #     generator.load_state_dict(ckpt["g"], strict=False)
+    #     discriminator.load_state_dict(ckpt["d"], strict=False)
+    #     g_ema.load_state_dict(ckpt["g_ema"], strict=False)
 
-        g_optim.load_state_dict(ckpt["g_optim"])
-        d_optim.load_state_dict(ckpt["d_optim"])
+    #     g_optim.load_state_dict(ckpt["g_optim"])
+    #     d_optim.load_state_dict(ckpt["d_optim"])
 
-    if args.distributed:
-        generator = nn.parallel.DistributedDataParallel(
-            generator,
-            device_ids=[args.local_rank],
-            output_device=args.local_rank,
-            broadcast_buffers=False,
-        )
-
-        discriminator = nn.parallel.DistributedDataParallel(
-            discriminator,
-            device_ids=[args.local_rank],
-            output_device=args.local_rank,
-            broadcast_buffers=False,
-        )
     return (
-        neural_renderer,
-        encoder,
-        decoder,
-        cond_model,
-        detector,
-        detector_eval,
-        compute_detector_loss,
-        generator,
-        discriminator,
-        g_ema,
-        g_optim,
-        d_optim,
-        train_loader,
-        mix_train_set,
-        device,
+        neural_renderer, encoder, decoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
+        discriminator, g_ema, g_optim, d_optim, scaler, train_loader, mix_train_set, device
     )
 
 
@@ -594,18 +533,12 @@ def requires_grad(model, flag=True):
         p.requires_grad = flag
 
 
-def accumulate(model1, model2, decay=0.999):
+def accumulate(model1: nn.Module, model2: nn.Module, decay=0.999):
     par1 = dict(model1.named_parameters())
     par2 = dict(model2.named_parameters())
 
     for k in par1.keys():
         par1[k].data.mul_(decay).add_(par2[k].data, alpha=1 - decay)
-
-
-def sample_data(loader):
-    while True:
-        for batch in loader:
-            yield batch
 
 
 def d_logistic_loss(real_pred, fake_pred):
@@ -621,7 +554,7 @@ def d_r1_loss(real_pred, real_img):
     return grad_penalty
 
 
-def g_nonsaturating_loss(fake_pred):
+def g_nonsaturating_loss(fake_pred: Tensor) -> Tensor:
     loss = F.softplus(-fake_pred).mean()
     return loss
 
@@ -648,38 +581,26 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="StyleGAN2 trainer")
 
     parser.add_argument('--save_dir', type=str, default='stylegan2')
-    parser.add_argument("--iter", type=int, default=20000, help="total training iterations")
-    parser.add_argument("--start_iter", type=int, default=0, help="total training iterations")
+    parser.add_argument("--epochs", type=int, default=20000, help="total training iterations")
     parser.add_argument("--batch", type=int, default=2, help="batch sizes for each gpus")
     parser.add_argument("--num_workers", type=int, default=8)
-    parser.add_argument("--n_sample", type=int, default=64, help="number of the samples generated during training")
-    parser.add_argument("--size", type=int, default=1024, help="image sizes for the model")
+    parser.add_argument("--size", type=int, default=1024, help="feature size for G")
     parser.add_argument("--r1", type=float, default=10, help="weight of the r1 regularization")
     parser.add_argument("--path_regularize", type=float, default=2, help="weight of the path length regularization")
-    parser.add_argument(
-        "--path_batch_shrink",
-        type=int,
-        default=2,
-        help="batch size reducing factor for the path length regularization (reduce memory consumption)"
-    )
+    parser.add_argument("--path_batch_shrink", type=int, default=2, help="batch reduce factor (reduce memory use)")
+
     parser.add_argument("--d_loss_every", type=int, default=2, help="interval of the r1 regularization")
     parser.add_argument("--d_reg_every", type=int, default=16, help="interval of the r1 regularization")
     parser.add_argument("--g_reg_every", type=int, default=4, help="interval of the path length regularization")
     parser.add_argument("--g_det_every", type=int, default=1, help="interval of the path length regularization")
     parser.add_argument("--valid_every", type=int, default=100, help="interval of the path length regularization")
-    parser.add_argument("--mixing", type=float, default=0.9, help="probability of latent code mixing")
+    parser.add_argument("--mix_prob", type=float, default=0.9, help="probability of latent code mixing")
     parser.add_argument("--ckpt", type=str, default=None, help="path to the checkpoints to resume training")
     parser.add_argument("--lr", type=float, default=0.002, help="learning rate")
-    parser.add_argument(
-        "--channel_multiplier",
-        type=int,
-        default=2,
-        help="channel multiplier factor for the model. config-f = 2, else = 1"
-    )
+    parser.add_argument("--channel_multiplier", type=int, default=2, help="channel multiplier factor")
 
     parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
-    # parser.add_argument('--obj_model', type=str, default='data/models/audi_et_te.obj')
-    parser.add_argument('--npoint', type=int, default=12306) # 12306, 23145
+    parser.add_argument('--npoint', type=int, default=12306)
     parser.add_argument('--num_feature', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=2048)
     parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/autoencoder/autoencoder.pt')

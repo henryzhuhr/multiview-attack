@@ -3,6 +3,7 @@
 Loss functions
 """
 
+from ast import List
 import torch
 import torch.nn as nn
 
@@ -139,7 +140,8 @@ class ComputeLoss:
                 pwh = (pwh.sigmoid() * 2) ** 2 * anchors[i]
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 iou = bbox_iou(pbox, tbox[i], CIoU=True).squeeze()  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
+                # lbox += (1.0 - iou).mean()  # iou loss
+                lbox += iou.mean()  # adversarial iou loss
 
                 # Objectness
                 iou = iou.detach().clamp(0).type(tobj.dtype)
@@ -172,7 +174,7 @@ class ComputeLoss:
         lcls *= self.hyp['cls']
         bs = tobj.shape[0]  # batch size
 
-        return [(lbox + lobj + lcls) * bs, [lbox * bs, lobj * bs, lcls * bs]]
+        return [(lbox + lobj + lcls) , [lbox , lobj , lcls ]]
 
     def build_targets(self, p, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)

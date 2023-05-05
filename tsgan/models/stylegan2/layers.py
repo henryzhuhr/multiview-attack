@@ -163,7 +163,7 @@ class EqualLinear(nn.Module):
     def forward(self, input):
         if self.activation:
             out = F.linear(input, self.weight * self.scale)
-            out = fused_leaky_relu(out, self.bias * self.lr_mul)
+            out = F.leaky_relu(out)
         else:
             out = F.linear(input, self.weight * self.scale, bias=self.bias * self.lr_mul)
 
@@ -312,13 +312,14 @@ class LatentStyledConv(nn.Module):
             blur_kernel=blur_kernel,
             demodulate=demodulate,
         )
+        self.bn=nn.BatchNorm1d(out_channel)
         self.noise = NoiseInjection()
         # self.bias = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
         # self.activate = ScaledLeakyReLU(0.2)
         self.activate = FusedLeakyReLU(out_channel)
 
     def forward(self, input, style, noise=None):
-        out = self.conv(input, style)
+        out = self.bn(self.conv(input, style))
         out = self.noise(out, noise=noise)
         # out = out + self.bias
         out = self.activate(out)
@@ -335,10 +336,11 @@ class ToRGB(nn.Module):
             # self.upsample = Upsample(blur_kernel)
             self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
         self.conv = ModulatedConv1d(in_channel, 3, 1, style_dim, demodulate=False)
+        self.bn=nn.BatchNorm1d(3)
         self.bias = nn.Parameter(torch.zeros(1, 3, 1))
 
     def forward(self, input, style, skip=None):
-        out = self.conv(input, style)
+        out = self.bn(self.conv(input, style))
         out = out + self.bias
         if skip is not None:
             out = out + self.upsample(skip)
