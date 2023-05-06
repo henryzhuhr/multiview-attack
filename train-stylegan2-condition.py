@@ -103,7 +103,6 @@ def train(args):
         for i_mini_batch, batch_data in enumerate(pbar):
             cond_images = batch_data["coco"]["image"].to(device)
             coco_label = batch_data["coco"]["predict_id"].to(device)
-            carla_scene_names = batch_data["carla"]["name"]
             carla_scene_images = batch_data["carla"]["image"]
             carla_render_params = batch_data["carla"]["render_param"]
             BS = cond_images.shape[0]
@@ -117,11 +116,10 @@ def train(args):
             #     noise_rotio = 0.5
             #     noise = torch.randn_like(texture_latent_mix_noise[i_b])
             #     # texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
-            #     texture_latent_mix_noise[i_b] = texture_latent_mix_noise[i_b] 
+            #     texture_latent_mix_noise[i_b] = texture_latent_mix_noise[i_b]
 
             with torch.no_grad():
                 cond_latent = cond_model.forward_latent(cond_images)
-
 
             # ----------------------------------------
             #  train Discriminator
@@ -139,7 +137,7 @@ def train(args):
                     d_real_loss = F.softplus(-real_pred).mean()
                     d_fake_loss = F.softplus(fake_pred).mean()
 
-                    d_loss=d_real_loss+d_fake_loss# D logistic loss
+                    d_loss = d_real_loss + d_fake_loss # D logistic loss
 
                     loss_d_epoch += d_loss.item()
                     real_score = real_pred.mean().item()
@@ -152,15 +150,12 @@ def train(args):
 
                 for i_b in range(fake_textures.size(0)):
                     carla_scene_image = carla_scene_images[i_b]
-                    carla_render_param = carla_render_params[i_b]
+                    crp = carla_render_params[i_b] # carla_render_param
                     fake_texture = fake_textures[i_b].unsqueeze(0)
                     tm = neural_renderer.textures_mask
                     render_texture = tm * fake_texture + (1 - tm) * neural_renderer.textures
 
-                    neural_renderer.set_render_perspective(
-                        carla_render_param["camera_transform"], carla_render_param["vehicle_transform"],
-                        carla_render_param["fov"]
-                    )
+                    neural_renderer.set_render_perspective(crp["camera_transform"], crp["vehicle_transform"],crp["fov"])        # yapf: disable
                     (rgb_images, depth_images, alpha_images) = neural_renderer.renderer.forward(
                         neural_renderer.vertices, neural_renderer.faces, torch.tanh(render_texture)
                     )
@@ -170,22 +165,13 @@ def train(args):
                     t_scene_image = torch.from_numpy(carla_scene_image).to(t_rgb_image.device).permute(2, 0, 1).float() / 255.  # yapf: disable
                     t_render_image = t_alpha_image * t_rgb_image + (1 - t_alpha_image) * t_scene_image
 
-                    render_npimg: np.ndarray = t_rgb_image.detach().cpu().numpy() * 255
-                    render_npimg = render_npimg.astype(np.uint8).transpose(1, 2, 0)
-
-                    # scene_npimg: np.ndarray = t_render_image.detach().cpu().numpy() * 255
-                    # print("name ",carla_scene_names[i_b])
-                    # scene_npimg = scene_npimg.astype(np.uint8)
-                    # scene_npimg = scene_npimg.transpose(1, 2, 0)
-                    # scene_npimg = np.ascontiguousarray(scene_npimg)
+                    render_npimg: np.ndarray = (t_rgb_image.detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)   # yapf: disable
 
                     render_image_list.append(t_rgb_image.unsqueeze(0))
                     render_scene_list.append(t_render_image.unsqueeze(0))
 
                     # find object label
-                    ret, binary = cv2.threshold(
-                        cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY
-                    )
+                    ret, binary = cv2.threshold(cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)   # yapf: disable
                     contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
                     find_boxes = []
                     for c in contours:
@@ -225,7 +211,7 @@ def train(args):
 
                 lbox_epoch += lbox.item() * BS
                 lobj_epoch += lobj.item() * BS
-                lcls_epoch += lcls.item() * BS
+                lcls_epoch += lcls.item() * BS           
                 det_loss_epoch += det_loss.item() * BS
                 d_loss = det_loss + d_loss if is_d_loss else det_loss
 
@@ -244,7 +230,7 @@ def train(args):
                 real_pred = discriminator(batch_texture_latent, cond_latent)
                 r1_loss = d_r1_loss(real_pred, batch_texture_latent)
 
-                loss_r1_epoch += r1_loss.item()* BS
+                loss_r1_epoch += r1_loss.item() * BS
 
                 discriminator.zero_grad()
                 scaler.scale(r1_loss).backward()

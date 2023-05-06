@@ -19,7 +19,7 @@ class Args:
     data_root = "tmp/data"
 
     class Dirs:
-        image = 'images'
+        image = 'images-src'
         label = 'labels'
         segmentation = 'segmentations'
 

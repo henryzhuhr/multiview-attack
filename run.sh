@@ -14,7 +14,7 @@ export OMP_NUM_THREADS=8
 # python -m torch.distributed.launch --nproc_per_node=2 train-stylegan2.py \
 #     --ckpt tmp/550000.pt
 
-export CUDA_VISIBLE_DEVICES=1
+# export CUDA_VISIBLE_DEVICES=1
 # -m torch.distributed.launch --nproc_per_node=1 
 python train-stylegan2-condition.py  \
     --save_dir tsgan \
