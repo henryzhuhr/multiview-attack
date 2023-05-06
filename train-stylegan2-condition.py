@@ -15,6 +15,7 @@ import torch
 from torch import Tensor, nn, autograd, optim
 from torch.nn import functional as F
 from torch.utils import data
+from torch.nn.utils import clip_grad_norm_
 import torch.distributed as dist
 from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms, utils
@@ -102,6 +103,7 @@ def train(args):
         for i_mini_batch, batch_data in enumerate(pbar):
             cond_images = batch_data["coco"]["image"].to(device)
             coco_label = batch_data["coco"]["predict_id"].to(device)
+            carla_scene_names = batch_data["carla"]["name"]
             carla_scene_images = batch_data["carla"]["image"]
             carla_render_params = batch_data["carla"]["render_param"]
             BS = cond_images.shape[0]
@@ -111,21 +113,21 @@ def train(args):
             # perform backward
             # ----------------------------------------
             texture_latent_mix_noise = batch_texture_latent.clone()
-            for i_b in range(BS):
-                noise_rotio = 1
-                noise = torch.randn_like(texture_latent_mix_noise[i_b])
-                texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
+            # for i_b in range(BS):
+            #     noise_rotio = 0.5
+            #     noise = torch.randn_like(texture_latent_mix_noise[i_b])
+            #     # texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
+            #     texture_latent_mix_noise[i_b] = texture_latent_mix_noise[i_b] 
 
             with torch.no_grad():
                 cond_latent = cond_model.forward_latent(cond_images)
 
-            requires_grad(generator, False)
-            requires_grad(discriminator, True)
-            requires_grad(detector, False)
 
             # ----------------------------------------
-            # perform backward
+            #  train Discriminator
             # ----------------------------------------
+            requires_grad(generator, False)
+            requires_grad(discriminator, True)
             with autocast():
                 fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
 
@@ -134,7 +136,10 @@ def train(args):
 
                 is_d_loss = i_mini_batch % args.d_loss_every == 0
                 if is_d_loss:
-                    d_loss = d_logistic_loss(real_pred, fake_pred) # D logistic loss
+                    d_real_loss = F.softplus(-real_pred).mean()
+                    d_fake_loss = F.softplus(fake_pred).mean()
+
+                    d_loss=d_real_loss+d_fake_loss# D logistic loss
 
                     loss_d_epoch += d_loss.item()
                     real_score = real_pred.mean().item()
@@ -168,9 +173,11 @@ def train(args):
                     render_npimg: np.ndarray = t_rgb_image.detach().cpu().numpy() * 255
                     render_npimg = render_npimg.astype(np.uint8).transpose(1, 2, 0)
 
-                    scene_npimg: np.ndarray = t_render_image.detach().cpu().numpy() * 255
-                    scene_npimg = scene_npimg.astype(np.uint8).transpose(1, 2, 0)
-                    scene_npimg = np.ascontiguousarray(scene_npimg)
+                    # scene_npimg: np.ndarray = t_render_image.detach().cpu().numpy() * 255
+                    # print("name ",carla_scene_names[i_b])
+                    # scene_npimg = scene_npimg.astype(np.uint8)
+                    # scene_npimg = scene_npimg.transpose(1, 2, 0)
+                    # scene_npimg = np.ascontiguousarray(scene_npimg)
 
                     render_image_list.append(t_rgb_image.unsqueeze(0))
                     render_scene_list.append(t_render_image.unsqueeze(0))
@@ -184,6 +191,7 @@ def train(args):
                     for c in contours:
                         [x, y, w, h] = cv2.boundingRect(c)
                         find_boxes.append([x, y, x + w, y + h])
+                    is_find_box = len(find_boxes) > 0
                     fc = np.array(find_boxes)
                     box = [min(fc[:, 0]), min(fc[:, 1]), max(fc[:, 2]), max(fc[:, 3])] # [x1,y1,x2,y2]
 
@@ -224,6 +232,7 @@ def train(args):
             # D backward
             discriminator.zero_grad()
             d_loss.backward()
+            clip_grad_norm_(parameters=discriminator.parameters(), max_norm=10, norm_type=2)
             d_optim.step()
 
             # ----------------------------------------
@@ -233,9 +242,9 @@ def train(args):
             if i_mini_batch % args.d_reg_every == 0:
                 batch_texture_latent.requires_grad = True
                 real_pred = discriminator(batch_texture_latent, cond_latent)
-                r1_loss = d_r1_loss(real_pred, batch_texture_latent) * args.d_reg_every * args.r1 / 2
+                r1_loss = d_r1_loss(real_pred, batch_texture_latent)
 
-                loss_r1_epoch += r1_loss.item()
+                loss_r1_epoch += r1_loss.item()* BS
 
                 discriminator.zero_grad()
                 scaler.scale(r1_loss).backward()
@@ -254,13 +263,14 @@ def train(args):
             with autocast():
                 fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
                 fake_pred = discriminator(fake_texture_latent, cond_latent)
-                g_gen_loss = g_nonsaturating_loss(fake_pred)
-                g_loss = g_gen_loss
+                g_loss = g_nonsaturating_loss(fake_pred)
+                g_loss_epoch += g_loss * BS
 
             generator.zero_grad()
             # g_loss.backward()
             scaler.scale(g_loss).backward()
             # g_optim.step()
+            clip_grad_norm_(parameters=generator.parameters(), max_norm=10, norm_type=2)
             scaler.step(g_optim)
             scaler.update()
 
@@ -286,46 +296,8 @@ def train(args):
             #     loss_dict["path_length"] = path_lengths.mean()
 
             accumulate(g_ema, generator, accum)
-            # ----------------------------------------
-            #  Valid
-            # ----------------------------------------
-            if (i_mini_batch % args.valid_every) == 0 and (render_scenes is not None):
-                
-                with torch.no_grad():
-                    pred = detector.forward(render_scenes)
-
-                    conf_thres, iou_thres = 0.25, 0.6
-                    pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
-                    result_imgs = []
-                    for i_b, det in enumerate(pred):
-                        cv2_img = np.ascontiguousarray(render_scenes[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
-                        if len(det):
-                            for *xyxy, conf, cls in det:
-                                label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
-                                x1, y1, x2, y2 = [int(xy) for xy in xyxy]
-                                cv2.rectangle(cv2_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                                cv2.putText(cv2_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-                        result_imgs.append(cv2_img)
-
-                    rows = cols = int(math.log2(len(result_imgs)))
-                    new_num_imgs = rows * cols
-                    img_height, img_width = result_imgs[0].shape[: 2]
-                    concatenated_image = np.zeros((img_height * rows, img_width * cols, 3), dtype=np.uint8)
-                    for i in range(rows):
-                        for j in range(cols):
-                            img_idx = i * cols + j
-                            if img_idx < len(result_imgs):
-                                concatenated_image[i * img_height :(i + 1) * img_height,
-                                                   j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
-                    cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
-                    cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_mini_batch}.png'), concatenated_image)
-
-
-
-
             pbar.set_description(" ".join((
-                f"{cstr('G')}:{g_gen_loss.item():.4f}",
+                f"{cstr('G')}:{g_loss.item():.4f}",
                 f"{cstr('D')}:{d_loss.item():.4f}",
                 f"{cstr('det')}:{det_loss.item():.4f}",
                 f"{cstr('lbox')}:{lbox.item():.4f}",
@@ -335,39 +307,70 @@ def train(args):
                 f"{cstr('Fs')}:{fake_score:.4f}" if is_d_loss else "",
                 f"{cstr('R1')}:{r1_loss.item():.4f}" if (i_mini_batch % args.d_reg_every == 0) else "",
             )))# yapf:disable
+        # ----------------------------------------
+        #  Valid
+        # ----------------------------------------
+        if (render_scenes is not None):
 
+            with torch.no_grad():
+                pred = detector_eval.forward(render_scenes)
 
+                conf_thres, iou_thres = 0.25, 0.6
+                pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
+                result_imgs = []
+                for i_b, det in enumerate(pred):
+                    cv2_img = np.ascontiguousarray(render_scenes[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
+                    if len(det):
+                        for *xyxy, conf, cls in det:
+                            label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
+                            x1, y1, x2, y2 = [int(xy) for xy in xyxy]
+                            cv2.rectangle(cv2_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(cv2_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-        if get_rank() == 0:
-            epoch_loss_dict = {
-                "G": g_loss_epoch / data_num,
-                "D": loss_d_epoch / data_num * args.d_loss_every,
-                "Det": det_loss_epoch / data_num,
-                "lbox": lbox_epoch / data_num,
-                "lobj": lobj_epoch / data_num,
-                "lcls": lcls_epoch / data_num,
-                "Rs": loss_real_epoch / data_num * args.d_loss_every,
-                "Fs": loss_fake_epoch / data_num * args.d_loss_every,
-                "R1": loss_r1_epoch / data_num * args.d_reg_every,
-            }
+                    result_imgs.append(cv2_img)
 
-            log_info = " ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()])
-            logging.info(log_info)
-            print(log_info)
-            print()
+                rows = cols = int(math.log2(len(result_imgs)))
+                new_num_imgs = rows * cols
+                img_height, img_width = result_imgs[0].shape[: 2]
+                concatenated_image = np.zeros((img_height * rows, img_width * cols, 3), dtype=np.uint8)
+                for i in range(rows):
+                    for j in range(cols):
+                        img_idx = i * cols + j
+                        if img_idx < len(result_imgs):
+                            concatenated_image[i * img_height :(i + 1) * img_height,
+                                               j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
+                cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
+                cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_mini_batch}.png'), concatenated_image)
 
-            if i % args.valid_every == 0:
-                torch.save(
-                    {
-                        "g": generator.state_dict(),
-                                                                   # "d": d_module.state_dict(),
-                                                                   # "g_ema": g_ema.state_dict(),
-                        "g_optim": g_optim.state_dict(),
-                                                                   # "d_optim": d_optim.state_dict(),
-                        "args": args,
-                    },
-                    f"{checkpoint_save_dir}/{str(i).zfill(6)}.pt",
-                )
+        epoch_loss_dict = {
+            "G": g_loss_epoch / data_num,
+            "D": loss_d_epoch / data_num * args.d_loss_every,
+            "Det": det_loss_epoch / data_num,
+            "lbox": lbox_epoch / data_num,
+            "lobj": lobj_epoch / data_num,
+            "lcls": lcls_epoch / data_num,
+            "Rs": loss_real_epoch / data_num * args.d_loss_every,
+            "Fs": loss_fake_epoch / data_num * args.d_loss_every,
+            "R1": loss_r1_epoch / data_num * args.d_reg_every,
+        }
+
+        log_info = " ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()])
+        logging.info(log_info)
+        print(log_info)
+        print()
+
+        if i % args.valid_every == 0:
+            torch.save(
+                {
+                    "g": generator.state_dict(),
+                                                               # "d": d_module.state_dict(),
+                                                               # "g_ema": g_ema.state_dict(),
+                    "g_optim": g_optim.state_dict(),
+                                                               # "d_optim": d_optim.state_dict(),
+                    "args": args,
+                },
+                f"{checkpoint_save_dir}/{str(i).zfill(6)}.pt",
+            )
 
 
 def prepare_training(args):
@@ -377,7 +380,7 @@ def prepare_training(args):
 
     mix_train_set = tsgan.data.CroppedCOCOCarlaMixDataset(
         'configs/dataset.yaml',
-        is_train=False,                                    # TODO: 测试完后, False 修改为训练 True
+        is_train=True,                                    # TODO: 测试完后, False 修改为训练 True
         show_detail=True,
         # load_all_class=True,
         transform=transforms.Compose([
@@ -427,15 +430,15 @@ def prepare_training(args):
     encoder = tsgan.models.autoencoder.TextureEncoder(
         num_feature=args.num_feature,
         latent_dim=args.latent_dim,
-    ).cuda()
+    ).cuda().train()
     decoder = tsgan.models.autoencoder.TextureDecoder(
         latent_dim=args.latent_dim,
         num_points=args.npoint,
         num_feature=args.num_feature,
-    ).cuda()
-    autoencoder_pretrained = torch.load(args.autoencoder_pretrained, map_location="cpu")
-    encoder.load_state_dict(autoencoder_pretrained['encoder'])
-    decoder.load_state_dict(autoencoder_pretrained['decoder'])
+    ).cuda().train()
+    # autoencoder_pretrained = torch.load(args.autoencoder_pretrained, map_location="cpu")
+    # encoder.load_state_dict(autoencoder_pretrained['encoder'])
+    # decoder.load_state_dict(autoencoder_pretrained['decoder'])
     cond_model = resnet50()
     cond_model.fc = nn.Linear(
         cond_model.fc.in_features,
@@ -461,7 +464,7 @@ def prepare_training(args):
     detector.load_state_dict(csd, strict=False)                                                  # load
     detector.train()
 
-    detector_eval = None
+    detector_eval = deepcopy(detector).eval() # for inference
 
     # ----------------------------------------------
     #   GAN
@@ -492,7 +495,13 @@ def prepare_training(args):
     d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
 
     g_optim = optim.Adam(
-        generator.parameters(),
+        [{
+            "params": generator.parameters()
+        }, {
+            "params": encoder.parameters()
+        }, {
+            "params": decoder.parameters()
+        }],
         lr=args.lr * g_reg_ratio,
         betas=(0**g_reg_ratio, 0.99**g_reg_ratio),
     )
@@ -539,12 +548,6 @@ def accumulate(model1: nn.Module, model2: nn.Module, decay=0.999):
         par1[k].data.mul_(decay).add_(par2[k].data, alpha=1 - decay)
 
 
-def d_logistic_loss(real_pred, fake_pred):
-    real_loss = F.softplus(-real_pred)
-    fake_loss = F.softplus(fake_pred)
-    return real_loss.mean() + fake_loss.mean()
-
-
 def d_r1_loss(real_pred, real_img):
     with conv2d_gradfix.no_weight_gradients():
         grad_real, = autograd.grad(outputs=real_pred.sum(), inputs=real_img, create_graph=True)
@@ -583,7 +586,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=2, help="batch sizes for each gpus")
     parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--size", type=int, default=1024, help="feature size for G")
-    parser.add_argument("--r1", type=float, default=10, help="weight of the r1 regularization")
     parser.add_argument("--path_regularize", type=float, default=2, help="weight of the path length regularization")
     parser.add_argument("--path_batch_shrink", type=int, default=2, help="batch reduce factor (reduce memory use)")
 

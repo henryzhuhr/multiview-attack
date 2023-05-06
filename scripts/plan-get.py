@@ -26,7 +26,7 @@ class Settings:
         # 'Town06',
         # 'Town07',
         # 'Town05',
-        'Town10HD',
+        # 'Town10HD',# Finish
                     # 'Town11',
     ]
 

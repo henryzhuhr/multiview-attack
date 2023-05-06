@@ -5,9 +5,9 @@ coco:
   val_annotation_file: instances_val2017.json
   categories:
     # - car
-    - tv
-    - bowl
-    - truck
+    # - tv
+    # - bowl
+    # - truck
     - laptop
 carla:
   root: tmp/data
