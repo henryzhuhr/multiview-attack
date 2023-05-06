@@ -110,9 +110,7 @@ class TextureDecoder(nn.Module):
         )
 
     def forward(self, latent_x: Tensor):
-        """
-            [1, latent_dim] --> [B, N, Ts, Ts, Ts, 3]
-        """
+        """ [1, latent_dim] --> [B, N, Ts, Ts, Ts, 3] """
         B = latent_x.size(0)
         ts = self.num_feature
         x = latent_x
@@ -127,27 +125,6 @@ class TextureDecoder(nn.Module):
         x = x.view(B, self.num_points, ts, ts, ts, 3)
         return x
 
-    def denoise(self, x_t: Tensor, beta: Tensor, latent: Tensor):
-        """
-            [1, latent_dim] --> [B, N, Ts, Ts, Ts, 3]
-        """
-        batch_size = x_t.size(0)
-        beta = beta.view(batch_size, 1, 1)      # (B, 1, 1)
-        latent = latent.view(batch_size, 1, -1) # (B, 1, F)
-
-        time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1) # (B, 1, 3)
-        ctx_emb = torch.cat([time_emb, latent], dim=-1)                        # (B, 1, F+3)
-
-        print(time_emb.size())
-        print(ctx_emb.size())
-
-        out = x_t
-        for i, layer in enumerate(self.layers):
-            out = layer(ctx=ctx_emb, x=out)
-            if i < len(self.layers) - 1:
-                out = self.dact(out)
-
-        return x + out
 
 
 if __name__ == '__main__':
