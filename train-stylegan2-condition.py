@@ -33,6 +33,7 @@ from tsgan.utils.distributed import (
     get_world_size,
 )
 from tsgan.models.op import conv2d_gradfix
+from tsgan.models.autoencoder import TextureAutoEncoder
 from tsgan.models.stylegan2 import Generator, Discriminator
 from tsgan.models.classifer import resnet50
 
@@ -67,13 +68,13 @@ def train(args):
     )
 
     (
-        neural_renderer, encoder, decoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
+        neural_renderer, autoencoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
         discriminator, g_ema, g_optim, d_optim, scaler, train_loader, mix_train_set, device
     ) = prepare_training(args)
 
     with torch.no_grad():
         real_texture = neural_renderer.textures
-        texture_latent = encoder.forward(real_texture)
+        texture_latent = autoencoder.encode(real_texture)
         batch_texture_latent = texture_latent.repeat(args.batch, *[1] * (len(texture_latent.size()) - 1))
 
     # ----------------------------------------------
@@ -124,28 +125,55 @@ def train(args):
             # ----------------------------------------
             #  train Discriminator
             # ----------------------------------------
+            
+            fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
+            real_pred = discriminator.forward(batch_texture_latent, cond_latent)
+            fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
+
             requires_grad(generator, False)
             requires_grad(discriminator, True)
-            with autocast():
+            is_d_loss = i_mini_batch % args.d_loss_every == 0
+            if is_d_loss:
+                d_real_loss = F.softplus(-real_pred).mean()
+                d_fake_loss = F.softplus(fake_pred).mean()
+
+                d_loss = d_real_loss + d_fake_loss # D logistic loss
+
+                loss_d_epoch += d_loss.item()
+                real_score = real_pred.mean().item()
+                loss_real_epoch += real_score
+                fake_score = fake_pred.mean().item()
+                loss_fake_epoch += fake_score
+                discriminator.zero_grad()
+                d_loss.backward()
+                clip_grad_norm_(parameters=discriminator.parameters(), max_norm=10, norm_type=2)
+                d_optim.step()
+
+            # ----------------------------------------
+            #   D regularization for every d_reg_every iterations
+            # ----------------------------------------
+            r1_loss = 0
+            if i_mini_batch % args.d_reg_every == 0:
+                batch_texture_latent.requires_grad = True
+                real_pred = discriminator(batch_texture_latent, cond_latent)
+                r1_loss = d_r1_loss(real_pred, batch_texture_latent)
+
+                loss_r1_epoch += r1_loss.item() * BS
+
+                discriminator.zero_grad()
+                r1_loss.backward()
+                d_optim.step()
+                batch_texture_latent.requires_grad = False
+
+            # ----------------------------------------
+            #  train generator: frozen D
+            # ----------------------------------------             
+            requires_grad(generator, True)
+            requires_grad(discriminator, False)
+            # with autocast():
+            if True:
                 fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-
-                real_pred = discriminator.forward(batch_texture_latent, cond_latent)
-                fake_pred = discriminator.forward(fake_texture_latent.detach(), cond_latent)
-
-                is_d_loss = i_mini_batch % args.d_loss_every == 0
-                if is_d_loss:
-                    d_real_loss = F.softplus(-real_pred).mean()
-                    d_fake_loss = F.softplus(fake_pred).mean()
-
-                    d_loss = d_real_loss + d_fake_loss # D logistic loss
-
-                    loss_d_epoch += d_loss.item()
-                    real_score = real_pred.mean().item()
-                    loss_real_epoch += real_score
-                    fake_score = fake_pred.mean().item()
-                    loss_fake_epoch += fake_score
-
-                fake_textures = decoder.forward(fake_texture_latent)
+                fake_textures = autoencoder.decode(fake_texture_latent)
                 render_image_list, render_scene_list, render_label_list = [], [], []
 
                 for i_b in range(fake_textures.size(0)):
@@ -211,54 +239,24 @@ def train(args):
 
                 lbox_epoch += lbox.item() * BS
                 lobj_epoch += lobj.item() * BS
-                lcls_epoch += lcls.item() * BS           
+                lcls_epoch += lcls.item() * BS
                 det_loss_epoch += det_loss.item() * BS
-                d_loss = det_loss + d_loss if is_d_loss else det_loss
 
-            # D backward
-            discriminator.zero_grad()
-            d_loss.backward()
-            clip_grad_norm_(parameters=discriminator.parameters(), max_norm=10, norm_type=2)
-            d_optim.step()
-
-            # ----------------------------------------
-            #   D regularization for every d_reg_every iterations
-            # ----------------------------------------
-            r1_loss = 0
-            if i_mini_batch % args.d_reg_every == 0:
-                batch_texture_latent.requires_grad = True
-                real_pred = discriminator(batch_texture_latent, cond_latent)
-                r1_loss = d_r1_loss(real_pred, batch_texture_latent)
-
-                loss_r1_epoch += r1_loss.item() * BS
-
-                discriminator.zero_grad()
-                scaler.scale(r1_loss).backward()
-                # r1_loss.backward()
-                scaler.step(d_optim)
-                # d_optim.step()
-                scaler.update()
-                batch_texture_latent.requires_grad = False
-
-            # frozen D
-            requires_grad(generator, True)
-            requires_grad(discriminator, False)
-
+            
             # G backward
             # fake_texture = generator.forward(texture_latent_mix_noise, cond_latent)
-            with autocast():
-                fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-                fake_pred = discriminator(fake_texture_latent, cond_latent)
-                g_loss = g_nonsaturating_loss(fake_pred)
-                g_loss_epoch += g_loss * BS
+            # with autocast():
+            #     fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
+            #     fake_pred = discriminator(fake_texture_latent, cond_latent)
+            #     g_loss = g_nonsaturating_loss(fake_pred)
+            #     g_loss_epoch += g_loss * BS
 
             generator.zero_grad()
             # g_loss.backward()
-            scaler.scale(g_loss).backward()
+            det_loss.backward()
             # g_optim.step()
-            clip_grad_norm_(parameters=generator.parameters(), max_norm=10, norm_type=2)
-            scaler.step(g_optim)
-            scaler.update()
+            # clip_grad_norm_(parameters=generator.parameters(), max_norm=10, norm_type=2)
+            g_optim.step()
 
             # ----------------------------------------
             #   G regularization for every g_reg_every iterations
@@ -283,7 +281,7 @@ def train(args):
 
             accumulate(g_ema, generator, accum)
             pbar.set_description(" ".join((
-                f"{cstr('G')}:{g_loss.item():.4f}",
+                # f"{cstr('G')}:{g_loss.item():.4f}",
                 f"{cstr('D')}:{d_loss.item():.4f}",
                 f"{cstr('det')}:{det_loss.item():.4f}",
                 f"{cstr('lbox')}:{lbox.item():.4f}",
@@ -329,7 +327,7 @@ def train(args):
                 cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_mini_batch}.png'), concatenated_image)
 
         epoch_loss_dict = {
-            "G": g_loss_epoch / data_num,
+            # "G": g_loss_epoch / data_num,
             "D": loss_d_epoch / data_num * args.d_loss_every,
             "Det": det_loss_epoch / data_num,
             "lbox": lbox_epoch / data_num,
@@ -413,18 +411,12 @@ def prepare_training(args):
     # ----------------------------------------------
     #   Load Pretrained Autoencoder & Classifier
     # ----------------------------------------------
-    encoder = tsgan.models.autoencoder.TextureEncoder(
-        num_feature=args.num_feature,
-        latent_dim=args.latent_dim,
-    ).cuda().train()
-    decoder = tsgan.models.autoencoder.TextureDecoder(
-        latent_dim=args.latent_dim,
-        num_points=args.npoint,
-        num_feature=args.num_feature,
-    ).cuda().train()
-    # autoencoder_pretrained = torch.load(args.autoencoder_pretrained, map_location="cpu")
-    # encoder.load_state_dict(autoencoder_pretrained['encoder'])
-    # decoder.load_state_dict(autoencoder_pretrained['decoder'])
+    autoencoder = TextureAutoEncoder(npoint=args.npoint, sample_point=1024, ts=args.num_feature, dim=args.latent_dim)
+    try:
+        autoencoder.load_state_dict(torch.load(args.autoencoder_pretrained, map_location="cpu"))
+    except:
+        print("load pretained model failed")
+    autoencoder.cuda().eval()
     cond_model = resnet50()
     cond_model.fc = nn.Linear(
         cond_model.fc.in_features,
@@ -461,18 +453,15 @@ def prepare_training(args):
         n_mlp=args.n_mlp,
         channel_multiplier=args.channel_multiplier,
         mix_prob=args.mix_prob,
-    ).cuda()
-    generator.train()
+    ).cuda().train()
     g_ema = Generator(
         style_dim=args.latent_dim,
         conditiom_latent_dim=cond_model.fc.in_features,
         n_mlp=args.n_mlp,
         channel_multiplier=args.channel_multiplier,
         mix_prob=args.mix_prob,
-    ).cuda()
-    g_ema.train()
-    discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).to(device)
-    discriminator.train()
+    ).cuda().train()
+    discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).cuda().train()
 
     scaler = GradScaler() # mixed precision training
     accumulate(g_ema, generator, 0)
@@ -481,13 +470,8 @@ def prepare_training(args):
     d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
 
     g_optim = optim.Adam(
-        [{
-            "params": generator.parameters()
-        }, {
-            "params": encoder.parameters()
-        }, {
-            "params": decoder.parameters()
-        }],
+        # [{"params": generator.parameters()},],
+        generator.parameters(),
         lr=args.lr * g_reg_ratio,
         betas=(0**g_reg_ratio, 0.99**g_reg_ratio),
     )
@@ -510,7 +494,7 @@ def prepare_training(args):
     #     d_optim.load_state_dict(ckpt["d_optim"])
 
     return (
-        neural_renderer, encoder, decoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
+        neural_renderer, autoencoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
         discriminator, g_ema, g_optim, d_optim, scaler, train_loader, mix_train_set, device
     )
 
@@ -546,7 +530,7 @@ def g_nonsaturating_loss(fake_pred: Tensor) -> Tensor:
     return loss
 
 
-def g_path_regularize(fake_latent, latents, mean_path_length, decay=0.01):
+def g_path_regulzarize(fake_latent, latents, mean_path_length, decay=0.01):
     noise = torch.randn_like(fake_latent) / math.sqrt(fake_latent.size(1))
     grad, = autograd.grad(outputs=(fake_latent * noise).sum(), inputs=latents, create_graph=True)
     path_lengths = torch.sqrt(grad.pow(2).sum(2).mean(1))
@@ -556,10 +540,7 @@ def g_path_regularize(fake_latent, latents, mean_path_length, decay=0.01):
     return path_penalty, path_mean.detach(), path_lengths
 
 
-def set_grad_none(model, targets):
-    for n, p in model.named_parameters():
-        if n in targets:
-            p.grad = None
+
 
 
 if __name__ == "__main__":
@@ -589,7 +570,7 @@ if __name__ == "__main__":
     parser.add_argument('--npoint', type=int, default=12306)
     parser.add_argument('--num_feature', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=2048)
-    parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/autoencoder/autoencoder.pt')
+    parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/nAE/autoencoder.pt')
     parser.add_argument('--classifier_pretrained', type=str, default='tmp/classifier/resnet50-4.pt')
 
     parser.add_argument("--local_rank", type=int, default=0)

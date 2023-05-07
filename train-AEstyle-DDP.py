@@ -66,9 +66,9 @@ def main():
         latent_dim=latent_dim,
     )
     decoder = tsgan.models.autoencoder.TextureDecoder(
-        latent_dim=latent_dim,
-        num_points=num_points,
-        num_feature=num_feature,
+        dim=latent_dim,
+        npoint=num_points,
+        ts=num_feature,
     )
     autoencoder_pretrained = torch.load(args.autoencoder_pretrained, map_location="cpu")
     encoder.load_state_dict(autoencoder_pretrained['encoder'])

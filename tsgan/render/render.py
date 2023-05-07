@@ -40,7 +40,7 @@ class NeuralRenderer(nn.Module):
         textures_mask = torch.zeros_like(textures).bool().to(device)
         if selected_faces is not None:
             for face_id in selected_faces:
-                textures_mask[face_id - 1, :, :, :, :] = True
+                textures_mask[face_id , :, :, :, :] = True
         else:
             textures_mask = ~textures_mask
         self.textures_mask = textures_mask.int()

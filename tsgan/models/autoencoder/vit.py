@@ -85,69 +85,6 @@ class Transformer(nn.Module):
             x = ff(x) + x
         return x
 
-
-class ViT(nn.Module):
-    def __init__(
-        self,
-        image_size,
-        patch_size,
-        num_classes,
-        dim,
-        depth,
-        heads,
-        mlp_dim,
-        pool='cls',
-        channels=3,
-        dim_head=64,
-        dropout=0.,
-        emb_dropout=0.
-    ):
-        super().__init__()
-        image_height, image_width = pair(image_size)
-        patch_height, patch_width = pair(patch_size)
-
-        assert image_height % patch_height == 0 and image_width % patch_width == 0, 'Image dimensions must be divisible by the patch size.'
-
-        num_patches = (image_height // patch_height) * (image_width // patch_width)
-        patch_dim = channels * patch_height * patch_width
-        assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
-
-        self.to_patch_embedding = nn.Sequential(
-            Rearrange('b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1=patch_height, p2=patch_width),
-            nn.LayerNorm(patch_dim),
-            nn.Linear(patch_dim, dim),
-            nn.LayerNorm(dim),
-        )
-
-        self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
-        self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
-        self.dropout = nn.Dropout(emb_dropout)
-
-        self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
-
-        self.pool = pool
-        self.to_latent = nn.Identity()
-
-        self.mlp_head = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, num_classes))
-
-    def forward(self, x: torch.Tensor):
-        x = self.to_patch_embedding(x)
-        b, n, _ = x.shape
-
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(n + 1)]
-        x = self.dropout(x)
-
-
-        x = self.transformer(x)
-
-        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-
-        x = self.to_latent(x)
-        return self.mlp_head(x)
-
-
 class TextureEncoder(nn.Module):
     def __init__(
         self,
@@ -165,14 +102,15 @@ class TextureEncoder(nn.Module):
             nn.LayerNorm(feature_dim),
             nn.Linear(feature_dim, latent_dim),
             nn.LayerNorm(latent_dim),
-            nn.Conv1d(npoint, sample_point, 1)
+            nn.Conv1d(npoint, sample_point, 1),
         )
 
         self.pos_embedding = nn.Parameter(torch.randn(1, sample_point + 1, latent_dim ))
         self.cls_token = nn.Parameter(torch.randn(1, 1, latent_dim))
         self.dropout = nn.Dropout(0.1)
 
-        self.transformer = Transformer(latent_dim, depth=1, heads=4, dim_head=64, mlp_dim=512, dropout=0.1)
+        self.transformer = Transformer(latent_dim, depth=1, heads=2, dim_head=64, mlp_dim=256, dropout=0.1)
+
 
         self.identity = nn.Identity()
 
@@ -188,7 +126,7 @@ class TextureEncoder(nn.Module):
         x += self.pos_embedding[:, :(n + 1)]
         x = self.dropout(x)
 
-        x = self.transformer.forward(x)
+        x = self.transformer(x)
 
         x = x.mean(dim=1) 
 
@@ -200,25 +138,8 @@ class TextureEncoder(nn.Module):
 
 if __name__ == '__main__':
     "https://blog.csdn.net/weixin_44966641/article/details/118733341"
-    device = 'cuda'
-    print("\033[00;32m")
-    model = ViT(
-        image_size=256,
-        patch_size=32,
-        num_classes=1000,
-        dim=1024,
-        depth=6,
-        heads=16,
-        mlp_dim=2048,
-        dropout=0.1,
-        emb_dropout=0.1
-    )
-
-    img = torch.randn(8, 3, 256, 256)
-    preds = model(img) # (1, 1000)
-
-    print("\033[0m")
-
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     print("============")
 
     print("\033[00;34m")
@@ -236,5 +157,3 @@ if __name__ == '__main__':
     for i in range(100000):
         y = model.forward(x)
         print(y.shape)
-
-    print("\033[0m")

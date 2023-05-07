@@ -77,22 +77,22 @@ class PointwiseNet(nn.Module):
 class TextureDecoder(nn.Module):
     def __init__(
         self,
-        latent_dim: int = 256,
-        num_points: int = 12306,
-        num_feature: int = 4,
+        dim: int = 256,
+        npoint: int = 12306,
+        ts: int = 4,
     ):
         super().__init__()
-        self.latent_dim = latent_dim
-        self.num_feature = num_feature
-        self.num_points = num_points
-        self.out_dim = (num_feature**3) * 3
+        self.latent_dim = dim
+        self.num_feature = ts
+        self.num_points = npoint
+        self.out_dim = (ts**3) * 3
 
-        self.conv1 = nn.Conv1d(latent_dim, 512, 1)
+        self.conv1 = nn.Conv1d(dim, 512, 1)
         self.conv2 = nn.Conv1d(512, 1024, 1)
         self.conv3 = nn.Conv1d(1024, 512, 1)
         self.conv4 = nn.Conv1d(512, self.out_dim, 1)
 
-        self.fc1 = nn.Linear(latent_dim, 512)
+        self.fc1 = nn.Linear(dim, 512)
         self.fc2 = nn.Linear(512, 512)
         self.fc3 = nn.Linear(512, self.out_dim)
         self.act = nn.GELU()
@@ -100,12 +100,12 @@ class TextureDecoder(nn.Module):
         self.dact = F.leaky_relu
         self.layers = nn.ModuleList(
             [
-                ConcatSquashLinear(3, 128, num_feature),
-                ConcatSquashLinear(128, 256, num_feature),
-                ConcatSquashLinear(256, 512, num_feature),
-                ConcatSquashLinear(512, 256, num_feature),
-                ConcatSquashLinear(256, 128, num_feature),
-                ConcatSquashLinear(128, 3, num_feature)
+                ConcatSquashLinear(3, 128, ts),
+                ConcatSquashLinear(128, 256, ts),
+                ConcatSquashLinear(256, 512, ts),
+                ConcatSquashLinear(512, 256, ts),
+                ConcatSquashLinear(256, 128, ts),
+                ConcatSquashLinear(128, 3, ts)
             ]
         )
 
@@ -132,8 +132,8 @@ if __name__ == '__main__':
     latent_x = torch.rand([1, 256]).cuda()
 
     model = TextureDecoder(
-        latent_dim=256,
-        num_points=12306,
+        dim=256,
+        npoint=12306,
         texture_size=4,
     )
     model.cuda()

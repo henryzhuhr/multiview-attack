@@ -79,7 +79,7 @@ def main():
     num_points = neural_renderer.textures.shape[1]
     latent_dim = args.latent_dim
     encoder = TextureEncoder(num_feature=ts, latent_dim=latent_dim).to(args.device)
-    decoder = TextureDecoder(latent_dim=latent_dim, num_points=num_points, num_feature=ts).to(args.device)
+    decoder = TextureDecoder(dim=latent_dim, npoint=num_points, ts=ts).to(args.device)
 
     criterion = nn.L1Loss().to(args.device)
 

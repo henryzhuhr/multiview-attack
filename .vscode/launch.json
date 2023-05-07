@@ -11,11 +11,24 @@
             "program": "${workspaceFolder}/train-stylegan2-condition.py",
             "console": "integratedTerminal",
             "args": [
-                "--save_dir","stylegan2-cropcoco_car",
-                "--autoencoder_pretrained", "tmp/autoencoder/autoencoder-3000.pt",
-                "--batch","32",
-                "--iter","800000",
+                "--save_dir",
+                "stylegan2-cropcoco_car",
+                "--autoencoder_pretrained",
+                "tmp/autoencoder/autoencoder-3000.pt",
+                "--batch",
+                "32",
+                "--iter",
+                "800000",
             ],
+            "justMyCode": true
+        },
+        {
+            "name": "Python: vit-test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/vit.py",
+            "console": "integratedTerminal",
+            "args": [],
             "justMyCode": true
         }
     ]
