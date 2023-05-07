@@ -9,7 +9,6 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.autograd import Function
 
-from ..op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d, conv2d_gradfix
 from tsgan.utils import logheader
 # print(logheader(),"input",input.shape) # TODO
 
@@ -31,8 +30,8 @@ class PixelNorm(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, input):
-        return input * torch.rsqrt(torch.mean(input**2, dim=1, keepdim=True) + 1e-8)
+    def forward(self, x):
+        return x * torch.rsqrt(torch.mean(x**2, dim=1, keepdim=True) + 1e-8)
 
 
 def make_kernel(k):
@@ -42,67 +41,6 @@ def make_kernel(k):
     k /= k.sum()
 
     return k
-
-
-class Upsample(nn.Module):
-    def __init__(self, kernel, factor=2):
-        super().__init__()
-
-        self.factor = factor
-        kernel = make_kernel(kernel) * (factor**2)
-        self.register_buffer("kernel", kernel)
-
-        p = kernel.shape[0] - factor
-
-        pad0 = (p + 1) // 2 + factor - 1
-        pad1 = p // 2
-
-        self.pad = (pad0, pad1)
-
-    def forward(self, input):
-        out = upfirdn2d(input, self.kernel, up=self.factor, down=1, pad=self.pad)
-
-        return out
-
-
-class Downsample(nn.Module):
-    def __init__(self, kernel, factor=2):
-        super().__init__()
-
-        self.factor = factor
-        kernel = make_kernel(kernel)
-        self.register_buffer("kernel", kernel)
-
-        p = kernel.shape[0] - factor
-
-        pad0 = (p + 1) // 2
-        pad1 = p // 2
-
-        self.pad = (pad0, pad1)
-
-    def forward(self, input):
-        out = upfirdn2d(input, self.kernel, up=1, down=self.factor, pad=self.pad)
-
-        return out
-
-
-class Blur(nn.Module):
-    def __init__(self, kernel, pad, upsample_factor=1):
-        super().__init__()
-
-        kernel = make_kernel(kernel)
-
-        if upsample_factor > 1:
-            kernel = kernel * (upsample_factor**2)
-
-        self.register_buffer("kernel", kernel)
-
-        self.pad = pad
-
-    def forward(self, input):
-        out = upfirdn2d(input, self.kernel, pad=self.pad)
-
-        return out
 
 
 class EqualConv2d(nn.Module):
@@ -199,13 +137,6 @@ class ModulatedConv1d(nn.Module):
             p = (len(blur_kernel) - factor) - (kernel_size - 1)
             pad0 = (p + 1) // 2 + factor - 1
             pad1 = p // 2 + 1
-            self.blur = Blur(blur_kernel, pad=(pad0, pad1), upsample_factor=factor)
-        if downsample:
-            factor = 2
-            p = (len(blur_kernel) - factor) + (kernel_size - 1)
-            pad0 = (p + 1) // 2
-            pad1 = p // 2
-            self.blur = Blur(blur_kernel, pad=(pad0, pad1))
         fan_in = in_channel * kernel_size**2
         self.scale = 1 / math.sqrt(fan_in)
         self.padding = kernel_size // 2
@@ -213,7 +144,8 @@ class ModulatedConv1d(nn.Module):
         self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
         self.demodulate = demodulate
         self.fused = fused
-    
+
+
     def forward(self, input:torch.Tensor, style:torch.Tensor):
         batch, in_channel, size = input.size()        
         style = self.modulation(style)
@@ -235,15 +167,6 @@ class ModulatedConv1d(nn.Module):
             # out = conv2d_gradfix.conv_transpose2d(input, weight, padding=0, stride=2, groups=batch)
             out =F.conv_transpose1d(input, weight, stride=2, padding=1,output_padding=1,groups=batch)
 
-            _, _, size = out.shape
-            out = out.view(batch, self.out_channel, size)
-            # out = self.blur(out)
-        elif self.downsample:
-            input = self.blur(input)
-            _, _, size = input.shape
-            input = input.view(1, batch * in_channel, size)
-            # out = conv2d_gradfix.conv2d(input, weight, padding=0, stride=2, groups=batch)
-            out = F.conv1d(input, weight, stride=2, padding=0, groups=batch)
             _, _, size = out.shape
             out = out.view(batch, self.out_channel, size)
 
@@ -276,12 +199,8 @@ class ConstantInput(nn.Module):
         super().__init__()
         self.input = nn.Parameter(torch.randn(1, channel, size))
 
-    def forward(self, input, is_s_code=False):
-        if not is_s_code:
-            batch = input.shape[0]
-        else:
-            batch = next(iter(input.values())).shape[0]
-        out = self.input.repeat(batch, 1, 1)
+    def forward(self, x):
+        out = self.input.repeat(x.shape[0], 1, 1)
         return out
 
 
@@ -293,8 +212,6 @@ class LatentStyledConv(nn.Module):
         kernel_size,
         style_dim,
         upsample=False,
-        blur_kernel=[1, 3, 3, 1],
-        demodulate=True,
     ):
         super().__init__()
         self.conv = ModulatedConv1d(
@@ -303,14 +220,12 @@ class LatentStyledConv(nn.Module):
             kernel_size,
             style_dim,
             upsample=upsample,
-            blur_kernel=blur_kernel,
-            demodulate=demodulate,
         )
         self.bn=nn.BatchNorm1d(out_channel)
         self.noise = NoiseInjection()
         # self.bias = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
         # self.activate = ScaledLeakyReLU(0.2)
-        self.activate = FusedLeakyReLU(out_channel)
+        self.activate = nn.LeakyReLU(out_channel)
 
     def forward(self, input, style, noise=None):
         out = self.bn(self.conv(input, style))
@@ -318,9 +233,6 @@ class LatentStyledConv(nn.Module):
         # out = out + self.bias
         out = self.activate(out)
         return out
-
-
-
 
 
 class ToRGB(nn.Module):
@@ -340,60 +252,6 @@ class ToRGB(nn.Module):
             out = out + self.upsample(skip)
         return out
 
-
-class ConvLayer(nn.Sequential):
-    def __init__(
-        self,
-        in_channel,
-        out_channel,
-        kernel_size,
-        downsample=False,
-        blur_kernel=[1, 3, 3, 1],
-        bias=True,
-        activate=True,
-    ):
-        layers = []
-        if downsample:
-            factor = 2
-            p = (len(blur_kernel) - factor) + (kernel_size - 1)
-            pad0 = (p + 1) // 2
-            pad1 = p // 2
-
-            layers.append(Blur(blur_kernel, pad=(pad0, pad1)))
-
-            stride = 2
-            self.padding = 0
-        else:
-            stride = 1
-            self.padding = kernel_size // 2
-        layers.append(
-            EqualConv2d(
-                in_channel,
-                out_channel,
-                kernel_size,
-                padding=self.padding,
-                stride=stride,
-                bias=bias and not activate,
-            )
-        )
-        if activate:
-            layers.append(FusedLeakyReLU(out_channel, bias=bias))
-        super().__init__(*layers)
-
-
-class ResBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, blur_kernel=[1, 3, 3, 1]):
-        super().__init__()
-        self.conv1 = ConvLayer(in_channel, in_channel, 3)
-        self.conv2 = ConvLayer(in_channel, out_channel, 3, downsample=True)
-        self.skip = ConvLayer(in_channel, out_channel, 1, downsample=True, activate=False, bias=False)
-
-    def forward(self, input):
-        out = self.conv1(input)
-        out = self.conv2(out)
-        skip = self.skip(input)
-        out = (out + skip) / math.sqrt(2)
-        return out
 
 class LatentResBlock(nn.Module):
     def __init__(self, in_channel, out_channel):

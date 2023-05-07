@@ -16,10 +16,11 @@ export OMP_NUM_THREADS=8
 
 export CUDA_VISIBLE_DEVICES=0
 
-python train-stylegan2-condition.py  \
+python train-tgan.py  \
     --save_dir tsgan \
-    --autoencoder_pretrained tmp/nAE/autoencoder.pt \
+    --obj_model data/models/vehicle-YZ.obj \
+    --selected_faces data/models/selected_faces.txt \
     --batch 8 --epochs 2000 --lr 0.002 \
-    --d_loss_every 2 --d_reg_every 4 \
+    --d_loss_every 16 --d_reg_every 32 \
     --g_reg_every 4 --g_det_every 1
 

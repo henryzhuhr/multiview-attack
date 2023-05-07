@@ -22,19 +22,12 @@ from torchvision import transforms, utils
 
 from tqdm import tqdm
 import yaml
+
+from models.gan import TextureGenerator, Discriminator
 import tsgan
 from tsgan.render import NeuralRenderer
 
-from tsgan.utils.distributed import (
-    get_rank,
-    synchronize,
-    reduce_loss_dict,
-    reduce_sum,
-    get_world_size,
-)
 from tsgan.models.op import conv2d_gradfix
-from tsgan.models.autoencoder import TextureAutoEncoder
-from tsgan.models.stylegan2 import Generator, Discriminator
 from tsgan.models.classifer import resnet50
 
 FILE = Path(__file__).resolve()
@@ -68,14 +61,15 @@ def train(args):
     )
 
     (
-        neural_renderer, autoencoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
-        discriminator, g_ema, g_optim, d_optim, scaler, train_loader, mix_train_set, device
+        neural_renderer, g_model, d_model, cond_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
+        train_loader, mix_train_set, device
     ) = prepare_training(args)
+    
 
     with torch.no_grad():
-        real_texture = neural_renderer.textures
-        texture_latent = autoencoder.encode(real_texture)
-        batch_texture_latent = texture_latent.repeat(args.batch, *[1] * (len(texture_latent.size()) - 1))
+        tt = neural_renderer.textures[:, neural_renderer.selected_faces, :]
+        real_x = tt.repeat(args.batch, *[1] * (len(tt.size()) - 1)).detach().clone()
+        real_x=torch.randn_like(real_x).to(real_x.device)
 
     # ----------------------------------------------
     #   start training
@@ -106,32 +100,31 @@ def train(args):
             coco_label = batch_data["coco"]["predict_id"].to(device)
             carla_scene_images = batch_data["carla"]["image"]
             carla_render_params = batch_data["carla"]["render_param"]
-            BS = cond_images.shape[0]
-            data_num += BS
+            bs = cond_images.shape[0]
+            data_num += bs
 
             # ----------------------------------------
             # perform backward
             # ----------------------------------------
-            texture_latent_mix_noise = batch_texture_latent.clone()
-            # for i_b in range(BS):
-            #     noise_rotio = 0.5
-            #     noise = torch.randn_like(texture_latent_mix_noise[i_b])
-            #     # texture_latent_mix_noise[i_b] = (1 - noise_rotio) * texture_latent_mix_noise[i_b] + noise_rotio * noise
-            #     texture_latent_mix_noise[i_b] = texture_latent_mix_noise[i_b]
+            noise_rotio = 0.5
+            random_z = torch.randn_like(real_x).to(real_x.device)
+            # random_z = noise_rotio * random_z + (1 - noise_rotio) * real_x
+            
 
             with torch.no_grad():
                 cond_latent = cond_model.forward_latent(cond_images)
+            print(coco_label)
 
             # ----------------------------------------
             #  train Discriminator
             # ----------------------------------------
-            
-            fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-            real_pred = discriminator.forward(batch_texture_latent, cond_latent)
-            fake_pred = discriminator.forward(fake_texture_latent, cond_latent)
+            fake_latent = g_model.forward(random_z, cond_latent)
+            exit()     
+            real_pred = d_model.forward(g_model.encode(real_x))
+            fake_pred = d_model.forward(fake_latent)
 
-            requires_grad(generator, False)
-            requires_grad(discriminator, True)
+            requires_grad(g_model, False)
+            requires_grad(d_model, True)
             is_d_loss = i_mini_batch % args.d_loss_every == 0
             if is_d_loss:
                 d_real_loss = F.softplus(-real_pred).mean()
@@ -144,9 +137,10 @@ def train(args):
                 loss_real_epoch += real_score
                 fake_score = fake_pred.mean().item()
                 loss_fake_epoch += fake_score
-                discriminator.zero_grad()
+
+                d_model.zero_grad()
                 d_loss.backward()
-                clip_grad_norm_(parameters=discriminator.parameters(), max_norm=10, norm_type=2)
+                clip_grad_norm_(parameters=d_model.parameters(), max_norm=10, norm_type=2)
                 d_optim.step()
 
             # ----------------------------------------
@@ -154,38 +148,38 @@ def train(args):
             # ----------------------------------------
             r1_loss = 0
             if i_mini_batch % args.d_reg_every == 0:
-                batch_texture_latent.requires_grad = True
-                real_pred = discriminator(batch_texture_latent, cond_latent)
-                r1_loss = d_r1_loss(real_pred, batch_texture_latent)
+                real_x_latent = g_model.encode(real_x)
+                real_x_latent.requires_grad = True
+                real_pred = d_model.forward(real_x_latent)
+                r1_loss = d_r1_loss(real_pred, real_x_latent)
 
-                loss_r1_epoch += r1_loss.item() * BS
+                loss_r1_epoch += r1_loss.item() * bs
 
-                discriminator.zero_grad()
+                d_model.zero_grad()
                 r1_loss.backward()
                 d_optim.step()
-                batch_texture_latent.requires_grad = False
 
             # ----------------------------------------
             #  train generator: frozen D
-            # ----------------------------------------             
-            requires_grad(generator, True)
-            requires_grad(discriminator, False)
-            # with autocast():
+            # ----------------------------------------
+            requires_grad(g_model, True)
+            requires_grad(d_model, False)
             if True:
-                fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-                fake_textures = autoencoder.decode(fake_texture_latent)
+                fake_xs = g_model.decode(g_model.forward(random_z, cond_latent))
+                _t = neural_renderer.textures.repeat(fake_xs.shape[0], *[1] * (len(neural_renderer.textures.size()) - 1))
+                _t[:, neural_renderer.selected_faces, :] = fake_xs
+                fake_textures=_t
+
                 render_image_list, render_scene_list, render_label_list = [], [], []
 
                 for i_b in range(fake_textures.size(0)):
                     carla_scene_image = carla_scene_images[i_b]
                     crp = carla_render_params[i_b] # carla_render_param
                     fake_texture = fake_textures[i_b].unsqueeze(0)
-                    tm = neural_renderer.textures_mask
-                    render_texture = tm * fake_texture + (1 - tm) * neural_renderer.textures
 
                     neural_renderer.set_render_perspective(crp["camera_transform"], crp["vehicle_transform"],crp["fov"])        # yapf: disable
                     (rgb_images, depth_images, alpha_images) = neural_renderer.renderer.forward(
-                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(render_texture)
+                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(fake_texture)
                     )
 
                     t_rgb_image = rgb_images.squeeze(0)
@@ -237,25 +231,14 @@ def train(args):
                 pred = detector.forward(render_images)
                 (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
 
-                lbox_epoch += lbox.item() * BS
-                lobj_epoch += lobj.item() * BS
-                lcls_epoch += lcls.item() * BS
-                det_loss_epoch += det_loss.item() * BS
+                lbox_epoch += lbox.item() * bs
+                lobj_epoch += lobj.item() * bs
+                lcls_epoch += lcls.item() * bs
+                det_loss_epoch += det_loss.item() * bs
 
-            
-            # G backward
-            # fake_texture = generator.forward(texture_latent_mix_noise, cond_latent)
-            # with autocast():
-            #     fake_texture_latent = generator.forward(texture_latent_mix_noise, cond_latent) # TODO: Inference
-            #     fake_pred = discriminator(fake_texture_latent, cond_latent)
-            #     g_loss = g_nonsaturating_loss(fake_pred)
-            #     g_loss_epoch += g_loss * BS
-
-            generator.zero_grad()
-            # g_loss.backward()
+            g_model.zero_grad()
             det_loss.backward()
-            # g_optim.step()
-            # clip_grad_norm_(parameters=generator.parameters(), max_norm=10, norm_type=2)
+            clip_grad_norm_(parameters=g_model.parameters(), max_norm=10, norm_type=2)
             g_optim.step()
 
             # ----------------------------------------
@@ -279,9 +262,9 @@ def train(args):
             #     loss_dict["path"] = path_loss
             #     loss_dict["path_length"] = path_lengths.mean()
 
-            accumulate(g_ema, generator, accum)
+            # accumulate(g_ema, generator, accum)
+
             pbar.set_description(" ".join((
-                # f"{cstr('G')}:{g_loss.item():.4f}",
                 f"{cstr('D')}:{d_loss.item():.4f}",
                 f"{cstr('det')}:{det_loss.item():.4f}",
                 f"{cstr('lbox')}:{lbox.item():.4f}",
@@ -291,11 +274,11 @@ def train(args):
                 f"{cstr('Fs')}:{fake_score:.4f}" if is_d_loss else "",
                 f"{cstr('R1')}:{r1_loss.item():.4f}" if (i_mini_batch % args.d_reg_every == 0) else "",
             )))# yapf:disable
-        # ----------------------------------------
-        #  Valid
-        # ----------------------------------------
-        if (render_scenes is not None):
 
+
+
+        #  Valid
+        if (render_scenes is not None):
             with torch.no_grad():
                 pred = detector_eval.forward(render_scenes)
 
@@ -324,10 +307,9 @@ def train(args):
                             concatenated_image[i * img_height :(i + 1) * img_height,
                                                j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
                 cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
-                cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_mini_batch}.png'), concatenated_image)
+                cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}.png'), concatenated_image)
 
         epoch_loss_dict = {
-            # "G": g_loss_epoch / data_num,
             "D": loss_d_epoch / data_num * args.d_loss_every,
             "Det": det_loss_epoch / data_num,
             "lbox": lbox_epoch / data_num,
@@ -337,16 +319,15 @@ def train(args):
             "Fs": loss_fake_epoch / data_num * args.d_loss_every,
             "R1": loss_r1_epoch / data_num * args.d_reg_every,
         }
-
-        log_info = " ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()])
-        logging.info(log_info)
-        print(log_info)
+        
+        logging.info(" ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()]))
+        print(" ".join([f"\033[00;34m{k}\033[0m:{v:.5f}" for k, v in epoch_loss_dict.items()]))
         print()
 
         if i % args.valid_every == 0:
             torch.save(
                 {
-                    "g": generator.state_dict(),
+                    "g": g_model.state_dict(),
                                                                # "d": d_module.state_dict(),
                                                                # "g_ema": g_ema.state_dict(),
                     "g_optim": g_optim.state_dict(),
@@ -364,7 +345,7 @@ def prepare_training(args):
 
     mix_train_set = tsgan.data.CroppedCOCOCarlaMixDataset(
         'configs/dataset.yaml',
-        is_train=False,                                    # TODO: 测试完后, False 修改为训练 True
+        is_train=True,                                    # TODO: 测试完后, False 修改为训练 True
         show_detail=True,
         # load_all_class=True,
         transform=transforms.Compose([
@@ -394,29 +375,24 @@ def prepare_training(args):
     # ----------------------------------------------
     #   Load Neural Renderer
     # ----------------------------------------------
-    with open('data/models/selected_faces.txt', 'r') as f:
+    with open(args.selected_faces, 'r') as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     neural_renderer = NeuralRenderer(
         args.obj_model,
         selected_faces=selected_faces,
-        texture_size=args.num_feature,
+        texture_size=args.texture_size,
         image_size=800,
         device=device,
     )
     neural_renderer.to(neural_renderer.textures.device)
     neural_renderer.renderer.to(neural_renderer.textures.device)
-    # neural_renderer.set_render_perspective(camera_transform, vehicle_transform, fov)
-    print('get textures size:', neural_renderer.textures.size())
+    x_t = neural_renderer.textures[:, selected_faces, :]
+    npoint = x_t.shape[1]
+    print('textures num:%d (%d selected)' % (neural_renderer.textures.shape[1], npoint))
 
     # ----------------------------------------------
     #   Load Pretrained Autoencoder & Classifier
     # ----------------------------------------------
-    autoencoder = TextureAutoEncoder(npoint=args.npoint, sample_point=1024, ts=args.num_feature, dim=args.latent_dim)
-    try:
-        autoencoder.load_state_dict(torch.load(args.autoencoder_pretrained, map_location="cpu"))
-    except:
-        print("load pretained model failed")
-    autoencoder.cuda().train()
     cond_model = resnet50()
     cond_model.fc = nn.Linear(
         cond_model.fc.in_features,
@@ -447,61 +423,35 @@ def prepare_training(args):
     # ----------------------------------------------
     #   GAN
     # ----------------------------------------------
-    generator = Generator(
+    g_model = TextureGenerator(
+        npoint=npoint,
+        sample_point=1024,
+        ts=args.texture_size,
         style_dim=args.latent_dim,
-        conditiom_latent_dim=cond_model.fc.in_features,
-        n_mlp=args.n_mlp,
-        channel_multiplier=args.channel_multiplier,
+        cond_dim=2048,
         mix_prob=args.mix_prob,
     ).cuda().train()
-    generator.forward(
-        torch.randn(args.batch, args.latent_dim).cuda(),
-        torch.randn(args.batch, cond_model.fc.in_features).cuda(),
-    )
-
-    exit()
-    g_ema = Generator(
-        style_dim=args.latent_dim,
-        conditiom_latent_dim=cond_model.fc.in_features,
-        n_mlp=args.n_mlp,
-        channel_multiplier=args.channel_multiplier,
-        mix_prob=args.mix_prob,
-    ).cuda().train()
-    discriminator = Discriminator(args.latent_dim, cond_model.fc.in_features).cuda().train()
-
-    scaler = GradScaler() # mixed precision training
-    accumulate(g_ema, generator, 0)
+    d_model = Discriminator(latent_dim=args.latent_dim, cond_dim=2048).cuda().train()
 
     g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
     d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
 
     g_optim = optim.Adam(
-        [{"params": generator.parameters()},{"params": autoencoder.parameters()},],# yapf:disable
-        # generator.parameters(),
+        g_model.parameters(),
         lr=args.lr * g_reg_ratio,
         betas=(0**g_reg_ratio, 0.99**g_reg_ratio),
     )
     d_optim = optim.Adam(
-        discriminator.parameters(),
+        d_model.parameters(),
         lr=args.lr * d_reg_ratio,
         betas=(0**d_reg_ratio, 0.99**d_reg_ratio),
     )
 
-    # if args.ckpt is not None:
-    #     print("load model:", args.ckpt)
-
-    #     ckpt = torch.load(args.ckpt, map_location=lambda storage, loc: storage)
-
-    #     generator.load_state_dict(ckpt["g"], strict=False)
-    #     discriminator.load_state_dict(ckpt["d"], strict=False)
-    #     g_ema.load_state_dict(ckpt["g_ema"], strict=False)
-
-    #     g_optim.load_state_dict(ckpt["g_optim"])
-    #     d_optim.load_state_dict(ckpt["d_optim"])
+    
 
     return (
-        neural_renderer, autoencoder, cond_model, detector, detector_eval, compute_detector_loss, generator,
-        discriminator, g_ema, g_optim, d_optim, scaler, train_loader, mix_train_set, device
+        neural_renderer, g_model, d_model, cond_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
+        train_loader, mix_train_set, device
     )
 
 
@@ -546,9 +496,6 @@ def g_path_regulzarize(fake_latent, latents, mean_path_length, decay=0.01):
     return path_penalty, path_mean.detach(), path_lengths
 
 
-
-
-
 if __name__ == "__main__":
     device = "cuda"
 
@@ -556,7 +503,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--save_dir', type=str, default='stylegan2')
     parser.add_argument("--epochs", type=int, default=20000, help="total training iterations")
-    parser.add_argument("--batch", type=int, default=2, help="batch sizes for each gpus")
+    parser.add_argument("--batch", type=int, default=8, help="batch sizes for each gpus")
     parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--size", type=int, default=1024, help="feature size for G")
     parser.add_argument("--path_regularize", type=float, default=2, help="weight of the path length regularization")
@@ -572,11 +519,10 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.002, help="learning rate")
     parser.add_argument("--channel_multiplier", type=int, default=2, help="channel multiplier factor")
 
-    parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
-    parser.add_argument('--npoint', type=int, default=12306)
-    parser.add_argument('--num_feature', type=int, default=4)
+    parser.add_argument('--obj_model', type=str, default="data/models/vehicle-YZ.obj")
+    parser.add_argument('--selected_faces', type=str, default="data/models/selected_faces.txt")
+    parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=2048)
-    parser.add_argument('--autoencoder_pretrained', type=str, default='tmp/nAE/autoencoder.pt')
     parser.add_argument('--classifier_pretrained', type=str, default='tmp/classifier/resnet50-4.pt')
 
     parser.add_argument("--local_rank", type=int, default=0)
@@ -586,10 +532,6 @@ if __name__ == "__main__":
     n_gpu = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
     args.distributed = n_gpu > 1
 
-    if args.distributed:
-        torch.cuda.set_device(args.local_rank)
-        torch.distributed.init_process_group(backend="nccl", init_method="env://")
-        synchronize()
 
     args.n_mlp = 8
 

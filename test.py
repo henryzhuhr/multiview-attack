@@ -13,18 +13,28 @@ from tsgan.utils import logheader
 import tsgan
 from tsgan.render import NeuralRenderer
 
+from models.gan import TextureGAN
+
 
 def test_model():
-    from tsgan.models.stylegan2 import Generator
+
     BS = 4
     device = torch.device("cuda")
-    generator = Generator(1024, 2048, 8, channel_multiplier=2).to(device)
+    npoint=2765
+    ts=4
+    tgan = TextureGAN(
+        npoint=npoint,
+        sample_point=1024,
+        ts=ts,
+        style_dim=1024,
+        cond_dim=2048,
+        mix_prob=0.9,
+    ).to(device)
 
-    print("generator params: %.2fM" % (sum(p.numel() for p in generator.parameters() if p.requires_grad) / 1e6))
-    latent_x = torch.randn(BS, 1024).to(device)
-    latent_c = torch.randn(BS, 2048).to(device)
-    latent_y = generator.forward(latent_x, latent_c)
-    print(latent_y.size())
+    print("generator params: %.2fM" % (sum(p.numel() for p in tgan.parameters() if p.requires_grad) / 1e6))
+    x = torch.randn(BS, npoint,ts,ts,ts,3).to(device)
+    y = tgan.forward(x)
+    print(y.size())
 
 
 def test_dataset():
