@@ -69,13 +69,11 @@ def train(args):
     with torch.no_grad():
         tt = neural_renderer.textures[:, neural_renderer.selected_faces, :]
         real_x = tt.repeat(args.batch, *[1] * (len(tt.size()) - 1)).detach().clone()
-        real_x = torch.randn_like(real_x).to(real_x.device)
 
     # ----------------------------------------------
     #   start training
     # ----------------------------------------------
     for epoch in range(args.epochs):
-        clr = g_optim.state_dict()['param_groups'][0]['lr']
         print(
             "\033[32m",
             f"[Epoch]{epoch}/{args.epochs}",
@@ -97,6 +95,8 @@ def train(args):
         pbar = tqdm(train_loader)
         g_model.train()
         d_model.train()
+
+        
         for i_mini_batch, batch_data in enumerate(pbar):
             cond_images = batch_data["coco"]["image"].to(device)
             coco_label = batch_data["coco"]["predict_id"].to(device)
@@ -111,8 +111,8 @@ def train(args):
             noise_rotio = 0.7
             random_z = torch.randn_like(real_x).to(real_x.device)
             # random_z = noise_rotio * random_z + (1 - noise_rotio) * real_x # add
-            # ri = random.sample(range(real_x.shape[1]), int(real_x.shape[1] * (1 - noise_rotio)))
-            # random_z[: ,ri] = real_x[: ,ri] # mask
+            ri = random.sample(range(real_x.shape[1]), int(real_x.shape[1] * (1 - noise_rotio)))
+            random_z[: ,ri] = real_x[: ,ri] # mask
 
             # ----------------------------------------
             #  train Discriminator
@@ -274,29 +274,83 @@ def train(args):
 
         #  Valid
         if True:
-            g_model.eval()            
-            with torch.no_grad():
-                fake_xs = g_model.decode(g_model.forward(random_z, coco_label))
+            g_model.eval()
+
+            for batch_data in train_loader:
+                cond_images = batch_data["coco"]["image"].to(device)
+                coco_label = batch_data["coco"]["predict_id"].to(device)
+                carla_scene_images = batch_data["carla"]["image"]
+                carla_render_params = batch_data["carla"]["render_param"]
+                bs = cond_images.shape[0]
+                break
 
             with torch.no_grad():
-                pred = detector_eval.forward(render_scenes)
+                fake_xs = g_model.decode(g_model.forward(torch.randn_like(real_x).to(real_x.device), coco_label))
+                tt = neural_renderer.textures.clone()
+                _t = tt.repeat(fake_xs.shape[0], *[1] * (len(tt.shape) - 1))
+                _t[:, neural_renderer.selected_faces, :] = fake_xs
+                fake_textures = _t
+
+                tt = neural_renderer.textures.clone()
+                _t = tt.repeat(real_x.shape[0], *[1] * (len(tt.shape) - 1))
+                _t[:, neural_renderer.selected_faces, :] = real_x
+                real_textures = _t
+
+                real_image_list, fake_image_list = [], []
+                for i_b in range(fake_textures.size(0)):
+                    carla_scene_image = carla_scene_images[i_b]
+                    t_scene_image = torch.from_numpy(carla_scene_image).to(fake_textures.device).permute(2, 0, 1).float() / 255.  # yapf: disable
+
+                    crp = carla_render_params[i_b] # carla_render_param
+                    fake_texture = fake_textures[i_b].unsqueeze(0)
+
+                    neural_renderer.set_render_perspective(crp["camera_transform"], crp["vehicle_transform"],crp["fov"])        # yapf: disable
+                    (r_rgb, _, r_alpha) = neural_renderer.renderer.forward(
+                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(real_textures)
+                    )
+                    r_render_image = r_alpha * r_rgb[0] + (1 - r_alpha) * t_scene_image
+                    real_image_list.append(r_render_image.unsqueeze(0))
+
+                    (f_rgb, _, f_alpha) = neural_renderer.renderer.forward(
+                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(fake_texture)
+                    )
+                    f_render_image = f_alpha * f_rgb[0] + (1 - f_alpha) * t_scene_image
+                    fake_image_list.append(f_render_image.unsqueeze(0))
+                real_images = torch.cat(real_image_list, dim=0).to(device)
+                fake_images = torch.cat(fake_image_list, dim=0).to(device)
+
+                with torch.no_grad():
+                    r_pred = detector_eval.forward(real_images)
+                    f_pred = detector_eval.forward(fake_images)
 
                 conf_thres, iou_thres = 0.25, 0.6
-                pred = non_max_suppression(pred, conf_thres, iou_thres, None, False)
-                result_imgs = []
-                for i_b, det in enumerate(pred):
-                    cv2_img = np.ascontiguousarray(render_scenes[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
+                r_pred = non_max_suppression(r_pred, conf_thres, iou_thres, None, False)
+                r_result_imgs = []
+                for i_b, det in enumerate(r_pred):
+                    cv_img = np.ascontiguousarray(real_images[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
                     if len(det):
                         for *xyxy, conf, cls in det:
                             label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
                             x1, y1, x2, y2 = [int(xy) for xy in xyxy]
-                            cv2.rectangle(cv2_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                            cv2.putText(cv2_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                            cv2.rectangle(cv_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(cv_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    r_result_imgs.append(cv_img)
 
-                    result_imgs.append(cv2_img)
+                f_pred = non_max_suppression(f_pred, conf_thres, iou_thres, None, False)
+                f_result_imgs = []
+                for i_b, det in enumerate(f_pred):
+                    cv_img = np.ascontiguousarray(fake_images[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
+                    if len(det):
+                        for *xyxy, conf, cls in det:
+                            label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
+                            x1, y1, x2, y2 = [int(xy) for xy in xyxy]
+                            cv2.rectangle(cv_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(cv_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    f_result_imgs.append(cv_img)
+
+                result_imgs = [cv2.hconcat([r_result_imgs[i], f_result_imgs[i]]) for i in range(len(r_result_imgs))]
 
                 rows = cols = int(math.log2(len(result_imgs)))
-                new_num_imgs = rows * cols
                 img_height, img_width = result_imgs[0].shape[: 2]
                 concatenated_image = np.zeros((img_height * rows, img_width * cols, 3), dtype=np.uint8)
                 for i in range(rows):
@@ -307,6 +361,7 @@ def train(args):
                                                j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
                 cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
                 cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}.png'), concatenated_image)
+
 
         epoch_loss_dict = {
             "D": loss_d_epoch / data_num * args.d_loss_every,
