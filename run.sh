@@ -19,6 +19,6 @@ export CUDA_VISIBLE_DEVICES=0
 python train-tgan.py  \
     --save_dir tsgan \
     --obj_model data/models/vehicle-YZ.obj \
-    --selected_faces data/models/selected_faces.txt \
-    --batch 8 --epochs 2000 --lr 0.2 \
+    --selected_faces data/models/faces-less.txt \
+    --batch 8 --epochs 2000 --lr 0.02 \
     --d_loss_every 16 --d_reg_every 32
