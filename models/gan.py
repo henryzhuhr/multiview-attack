@@ -2,8 +2,9 @@ import math
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
-from .vit import TextureEncoder
+from .encoder import TextureEncoder
 from .decoder import TextureDecoder
 from .layers import (
     LatentResBlock,
@@ -19,13 +20,15 @@ class Generator(nn.Module):
     def __init__(
         self,
         style_dim: int = 1024, # latent dim
-        cond_dim: int = 2048,
+        cond_dim: int = 80,
+        latent_dim: int = 1024,
         mix_prob=0.9,
     ):
         super().__init__()
 
         self.size = size = 1024
-        self.cond_mapping_layer = nn.Linear(cond_dim, style_dim) # [B,2048]->[B,512]
+        self.cond_dim = cond_dim
+        self.embedding_matrix = nn.Parameter(torch.randn(cond_dim, style_dim))
 
         self.style_dim = style_dim
 
@@ -83,7 +86,7 @@ class Generator(nn.Module):
         self.out_mapping_layer = nn.Sequential(
             nn.Linear(size * 3, size),
             nn.LeakyReLU(),
-            nn.Linear(size, style_dim),
+            nn.Linear(size, latent_dim),
         )
 
         for m in self.modules():
@@ -95,15 +98,17 @@ class Generator(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,             # [B, 1024]
-        cond_latent: torch.Tensor,   # [B, 2048]
-        return_latents=False,
+        x: torch.Tensor,                                     # [B, 1024]
+        y: torch.Tensor,                                     # [B, num_classes] onehot
     ):
-        cond_latent = self.cond_mapping_layer(cond_latent)
+        cond_latent = torch.mm(
+            F.one_hot(y, num_classes=self.cond_dim).float(),
+            self.embedding_matrix,
+        )
         styles = [
             self.style(s) for s in [
-                x,                   # styles[0]
-                cond_latent,         # styles[1]
+                x,                                           # styles[0]
+                cond_latent,                                 # styles[1]
             ]
         ]
 
@@ -147,8 +152,7 @@ class Generator(nn.Module):
 
         x = skip.reshape(skip.size(0), -1)
         x = self.out_mapping_layer(x)
-
-        return x if not return_latents else (x, latent)
+        return x
 
 
 class Discriminator(nn.Module):
@@ -183,29 +187,29 @@ class Discriminator(nn.Module):
 class TextureGenerator(nn.Module):
     def __init__(
         self,
-        npoint: int = 12306,
+        npoint: int = 2679,
         sample_point: int = 1024,
         ts: int = 4,              # texture size
         style_dim: int = 1024,    # latent dim
-        cond_dim: int = 2048,
+        cond_dim: int = 80,
         mix_prob=0.9,
     ) -> None:
         super().__init__()
-        self.cond_dim=cond_dim
+        self.cond_dim = cond_dim
         self.encoder = TextureEncoder(npoint=npoint, sample_point=sample_point, ts=ts, dim=style_dim)
         self.decoder = TextureDecoder(npoint=npoint, ts=ts, dim=style_dim)
         self.g_model = Generator(style_dim=style_dim, cond_dim=cond_dim, mix_prob=mix_prob)
 
-    def forward(self, x: torch.Tensor, cond: torch.Tensor=None):
+    def forward(self, x: torch.Tensor, y: torch.Tensor = None):
         """ [B, N, T, T, T, C] """
         latent = self.encoder.forward(x)
-        if cond is None:
-            cond = torch.randn(latent.shape[0], self.cond_dim, device=latent.device)
-        rec=self.g_model.forward(latent, cond)
+        if y is None:
+            y = torch.randn(latent.shape[0], self.cond_dim, device=latent.device)
+        rec = self.g_model.forward(latent, y)
         return rec
-    
+
     def encode(self, x: torch.Tensor):
         return self.encoder.forward(x)
-    
+
     def decode(self, x: torch.Tensor):
         return self.decoder.forward(x)

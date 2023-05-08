@@ -61,7 +61,7 @@ def train(args):
     )
 
     (
-        neural_renderer, g_model, d_model, cond_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
+        neural_renderer, g_model, d_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
         train_loader, mix_train_set, device
     ) = prepare_training(args)
     
@@ -109,24 +109,19 @@ def train(args):
             noise_rotio = 0.5
             random_z = torch.randn_like(real_x).to(real_x.device)
             # random_z = noise_rotio * random_z + (1 - noise_rotio) * real_x
-            
-
-            with torch.no_grad():
-                cond_latent = cond_model.forward_latent(cond_images)
-            print(coco_label)
 
             # ----------------------------------------
             #  train Discriminator
             # ----------------------------------------
-            fake_latent = g_model.forward(random_z, cond_latent)
-            exit()     
+            fake_latent = g_model.forward(random_z, coco_label)   
             real_pred = d_model.forward(g_model.encode(real_x))
             fake_pred = d_model.forward(fake_latent)
 
             requires_grad(g_model, False)
             requires_grad(d_model, True)
             is_d_loss = i_mini_batch % args.d_loss_every == 0
-            if is_d_loss:
+            # if is_d_loss:
+            if False:
                 d_real_loss = F.softplus(-real_pred).mean()
                 d_fake_loss = F.softplus(fake_pred).mean()
 
@@ -147,7 +142,8 @@ def train(args):
             #   D regularization for every d_reg_every iterations
             # ----------------------------------------
             r1_loss = 0
-            if i_mini_batch % args.d_reg_every == 0:
+            # if i_mini_batch % args.d_reg_every == 0:
+            if False == 0:
                 real_x_latent = g_model.encode(real_x)
                 real_x_latent.requires_grad = True
                 real_pred = d_model.forward(real_x_latent)
@@ -165,7 +161,7 @@ def train(args):
             requires_grad(g_model, True)
             requires_grad(d_model, False)
             if True:
-                fake_xs = g_model.decode(g_model.forward(random_z, cond_latent))
+                fake_xs = g_model.decode(g_model.forward(random_z, coco_label))
                 _t = neural_renderer.textures.repeat(fake_xs.shape[0], *[1] * (len(neural_renderer.textures.size()) - 1))
                 _t[:, neural_renderer.selected_faces, :] = fake_xs
                 fake_textures=_t
@@ -265,14 +261,14 @@ def train(args):
             # accumulate(g_ema, generator, accum)
 
             pbar.set_description(" ".join((
-                f"{cstr('D')}:{d_loss.item():.4f}",
+                # f"{cstr('D')}:{d_loss.item():.4f}",
                 f"{cstr('det')}:{det_loss.item():.4f}",
                 f"{cstr('lbox')}:{lbox.item():.4f}",
                 f"{cstr('lobj')}:{lobj.item():.4f}",
                 f"{cstr('lcls')}:{lcls.item():.4f}",
-                f"{cstr('Rs')}:{real_score:.4f}" if is_d_loss else "",
-                f"{cstr('Fs')}:{fake_score:.4f}" if is_d_loss else "",
-                f"{cstr('R1')}:{r1_loss.item():.4f}" if (i_mini_batch % args.d_reg_every == 0) else "",
+                # f"{cstr('Rs')}:{real_score:.4f}" if is_d_loss else "",
+                # f"{cstr('Fs')}:{fake_score:.4f}" if is_d_loss else "",
+                # f"{cstr('R1')}:{r1_loss.item():.4f}" if (i_mini_batch % args.d_reg_every == 0) else "",
             )))# yapf:disable
 
 
@@ -310,14 +306,14 @@ def train(args):
                 cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}.png'), concatenated_image)
 
         epoch_loss_dict = {
-            "D": loss_d_epoch / data_num * args.d_loss_every,
+            # "D": loss_d_epoch / data_num * args.d_loss_every,
             "Det": det_loss_epoch / data_num,
             "lbox": lbox_epoch / data_num,
             "lobj": lobj_epoch / data_num,
             "lcls": lcls_epoch / data_num,
-            "Rs": loss_real_epoch / data_num * args.d_loss_every,
-            "Fs": loss_fake_epoch / data_num * args.d_loss_every,
-            "R1": loss_r1_epoch / data_num * args.d_reg_every,
+            # "Rs": loss_real_epoch / data_num * args.d_loss_every,
+            # "Fs": loss_fake_epoch / data_num * args.d_loss_every,
+            # "R1": loss_r1_epoch / data_num * args.d_reg_every,
         }
         
         logging.info(" ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()]))
@@ -342,10 +338,9 @@ def prepare_training(args):
     # ----------------------------------------------
     #   Load Data
     # ----------------------------------------------
-
     mix_train_set = tsgan.data.CroppedCOCOCarlaMixDataset(
         'configs/dataset.yaml',
-        is_train=True,                                    # TODO: 测试完后, False 修改为训练 True
+        is_train=False,                                    # TODO: 测试完后, False 修改为训练 True
         show_detail=True,
         # load_all_class=True,
         transform=transforms.Compose([
@@ -353,7 +348,7 @@ def prepare_training(args):
                 transforms.Resize([224, 224]),
                 transforms.ToTensor(),
         ]),
-    )# yapf:disable
+    )   # yapf:disable
 
     if False:
         os.makedirs(tmp_dataset_image_save := "tmp/mix_coco", exist_ok=True)
@@ -391,21 +386,8 @@ def prepare_training(args):
     print('textures num:%d (%d selected)' % (neural_renderer.textures.shape[1], npoint))
 
     # ----------------------------------------------
-    #   Load Pretrained Autoencoder & Classifier
-    # ----------------------------------------------
-    cond_model = resnet50()
-    cond_model.fc = nn.Linear(
-        cond_model.fc.in_features,
-        mix_train_set.COCO_CATEGORIES_MAP.__len__(),
-    )
-    cond_model.load_state_dict(torch.load(args.classifier_pretrained, map_location="cpu"))
-    cond_model.cuda().eval()
-
-    # ----------------------------------------------
     #   Detector
     # ----------------------------------------------
-    # with open(data, "r") as f:
-    #     data_dict: dict = yaml.safe_load(f) # dictionary
     with open("configs/hyp.scratch-low.yaml", "r") as f:
         hyp: dict = yaml.safe_load(f)                                                            # load hyps dict
     nc = 80
@@ -425,13 +407,12 @@ def prepare_training(args):
     # ----------------------------------------------
     g_model = TextureGenerator(
         npoint=npoint,
-        sample_point=1024,
         ts=args.texture_size,
         style_dim=args.latent_dim,
-        cond_dim=2048,
+        cond_dim=len(mix_train_set.COCO_CLASS),
         mix_prob=args.mix_prob,
     ).cuda().train()
-    d_model = Discriminator(latent_dim=args.latent_dim, cond_dim=2048).cuda().train()
+    d_model = Discriminator(latent_dim=args.latent_dim, cond_dim=len(mix_train_set.COCO_CLASS)).cuda().train()
 
     g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
     d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
@@ -450,7 +431,7 @@ def prepare_training(args):
     
 
     return (
-        neural_renderer, g_model, d_model, cond_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
+        neural_renderer, g_model, d_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
         train_loader, mix_train_set, device
     )
 
@@ -512,7 +493,6 @@ if __name__ == "__main__":
     parser.add_argument("--d_loss_every", type=int, default=2, help="interval of the r1 regularization")
     parser.add_argument("--d_reg_every", type=int, default=16, help="interval of the r1 regularization")
     parser.add_argument("--g_reg_every", type=int, default=4, help="interval of the path length regularization")
-    parser.add_argument("--g_det_every", type=int, default=1, help="interval of the path length regularization")
     parser.add_argument("--valid_every", type=int, default=100, help="interval of the path length regularization")
     parser.add_argument("--mix_prob", type=float, default=0.9, help="probability of latent code mixing")
     parser.add_argument("--ckpt", type=str, default=None, help="path to the checkpoints to resume training")
@@ -522,7 +502,7 @@ if __name__ == "__main__":
     parser.add_argument('--obj_model', type=str, default="data/models/vehicle-YZ.obj")
     parser.add_argument('--selected_faces', type=str, default="data/models/selected_faces.txt")
     parser.add_argument('--texture_size', type=int, default=4)
-    parser.add_argument('--latent_dim', type=int, default=2048)
+    parser.add_argument('--latent_dim', type=int, default=1024)
     parser.add_argument('--classifier_pretrained', type=str, default='tmp/classifier/resnet50-4.pt')
 
     parser.add_argument("--local_rank", type=int, default=0)
