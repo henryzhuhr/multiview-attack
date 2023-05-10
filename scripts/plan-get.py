@@ -10,6 +10,7 @@ import json
 import cv2
 import numpy as np
 import carla
+
 sys.path.append(os.getcwd())
 from tsgan import types
 
@@ -19,31 +20,23 @@ class Settings:
     data_root = "tmp/data"
     # client.get_available_maps()
     maps = [
-        # 'Town01',
-        # 'Town02',
-        # 'Town03',
-        # 'Town04',
-        # 'Town06',
-        # 'Town07',
-        # 'Town05',
-        # 'Town10HD',# Finish
+                    # 'Town01',
+                    # 'Town02',
+                    # 'Town03',
+                    # 'Town04',
+                    # 'Town06',
+                    # 'Town07',
+                    # 'Town05',
+        'Town10HD', # Finish
                     # 'Town11',
     ]
 
     # [x,y,z,fov]
     camera_distances = [
-                         # [3, 2, 2, 100],
-                         # [3, 2, 2, 00],
-        # [3, 2, 3, 90],
-                         # [4, 2.5, 2, 90],
-                         # [4, 2.5, 3, 90],
-        [4, 2.5, 4, 90],
-        # [10, 6, 3, 90],
-        [8, 6, 3, 90],
-                         # [12, 8, 7, 70],
-        [12, 8, 5, 90],
-                         # [15, 10, 10, 60],
-        # [15, 10, 5, 90],
+       [5, 4, 2, 90],
+        [5, 5, 2.5, 90],
+        [6, 4, 3, 90], 
+        [7, 4, 2, 90],
     ]
 
 
@@ -74,7 +67,7 @@ def generate_plan(world_map: str):
             vehicle_transform: types.carla.Transform = spawn_point
 
             # 遍历相机距离
-            for distance_index, (x, y, z, fov) in enumerate(Settings.camera_distances):
+            for distance_index, (x, y, z, fov) in enumerate(random.sample(Settings.camera_distances, 2)):
                 # 遍历相机方位
                 for direction_index, (x, y, z) in enumerate(Utils.extend_xyz(x, y, z)):
                     save_name = "%s-point_%04d-distance_%03d-direction_%d" % (
@@ -93,6 +86,7 @@ def generate_plan(world_map: str):
                                 "name": save_name,
                                 "image": save_name + ".png",
                                 "state": False,
+                                "scene": False,
                                 "map": world_map,
                                 "vehicle":
                                     {
@@ -134,7 +128,7 @@ def generate_plan(world_map: str):
                     #     f'\033[1;32m[Map]\033[0m {world_map}',  #
                     #     f'\033[1;32m[Save]\033[0m {save_name}', #
                     # )
-
+        
     except RuntimeError as e:
         print(ColorConsole.red, '[RuntimeError]', ColorConsole.reset, f'in Map:{world_map}', e)
     else:
@@ -175,19 +169,27 @@ class ColorConsole:
 class Utils:
     @staticmethod
     def extend_xyz(x, y, z):
-        e=[
+        e = [
             [x, 0, z],
             [x, y, z],
-            [x, 0, z],
             [x, y, z],
+            [x, y, z],
+            
             [0, y, z],
             [-x, y, z],
+            [-x, y, z],
+            [-x, y, z],
+
             [-x, 0, z],
             [-x, -y, z],
+            [-x, -y, z],
+
             [0, -y, z],
             [x, -y, z],
+            [x, -y, z],
+            
         ]
-        return random.sample(e, 3)
+        return random.sample(e, 2)
 
     @staticmethod
     def get_rotation_by_center_actor(x=0., y=0., z=0.):

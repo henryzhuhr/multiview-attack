@@ -43,74 +43,6 @@ def make_kernel(k):
     return k
 
 
-class EqualConv2d(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size, stride=1, padding=0, bias=True):
-        super().__init__()
-
-        self.weight = nn.Parameter(torch.randn(out_channel, in_channel, kernel_size, kernel_size))
-        self.scale = 1 / math.sqrt(in_channel * kernel_size**2)
-
-        self.stride = stride
-        self.padding = padding
-
-        if bias:
-            self.bias = nn.Parameter(torch.zeros(out_channel))
-
-        else:
-            self.bias = None
-
-    def forward(self, input):
-        out = conv2d_gradfix.conv2d(
-            input,
-            self.weight * self.scale,
-            bias=self.bias,
-            stride=self.stride,
-            padding=self.padding,
-        )
-
-        return out
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}({self.weight.shape[1]}, {self.weight.shape[0]},"
-            f" {self.weight.shape[2]}, stride={self.stride}, padding={self.padding})"
-        )
-
-
-class EqualLinear(nn.Module):
-    """ from ProgressiveGAN"""
-    """TODO:
-        调的函数本质还是torch.nn.functional.linear（此处的F.linear），只是封装了以下，对weight和bias做了一些缩放，且不同于torch.nn.linear对F.linear的封装方式。
-
-        这同样出自ProgressiveGAN，weight从标准正态分布随机采样，而将何凯明初始化放到之后动态地进行，这对RMSProp、Adam等优化方式有帮助，保证所有的weight都是一样的学习速度。
-        ————————————————
-        版权声明：本文为CSDN博主「三思为上策」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
-        原文链接：https://blog.csdn.net/qq_43522986/article/details/125195395
-    """
-    def __init__(self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1, activation=True):
-        super().__init__()
-        self.weight = nn.Parameter(torch.randn(out_dim, in_dim).div_(lr_mul))
-        if bias:
-            self.bias = nn.Parameter(torch.zeros(out_dim).fill_(bias_init))
-        else:
-            self.bias = None
-        self.activation = activation
-        self.scale = (1 / math.sqrt(in_dim)) * lr_mul
-        self.lr_mul = lr_mul
-
-    def forward(self, input):
-        if self.activation:
-            out = F.linear(input, self.weight * self.scale)
-            out = F.leaky_relu(out)
-        else:
-            out = F.linear(input, self.weight * self.scale, bias=self.bias * self.lr_mul)
-
-        return out
-
-    def __repr__(self):
-        return (f"{self.__class__.__name__}({self.weight.shape[1]}, {self.weight.shape[0]})")
-
-
 class ModulatedConv1d(nn.Module):
     def __init__(
         self,
@@ -141,17 +73,16 @@ class ModulatedConv1d(nn.Module):
         self.scale = 1 / math.sqrt(fan_in)
         self.padding = kernel_size // 2
         self.weight = nn.Parameter(torch.randn(1, out_channel, in_channel, kernel_size))
-        self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
+        self.modulation = nn.Sequential(nn.Linear(style_dim, in_channel),nn.LeakyReLU())
         self.demodulate = demodulate
         self.fused = fused
 
 
     def forward(self, input:torch.Tensor, style:torch.Tensor):
-        batch, in_channel, size = input.size()        
+        batch, in_channel, size = input.size()
         style = self.modulation(style)
         style = style.view(batch, 1, in_channel, 1)
 
-        
         weight = self.scale * (self.weight * style)
         if self.demodulate:
             demod = torch.rsqrt(weight.pow(2).sum([2, 3]) + 1e-8)
@@ -222,15 +153,12 @@ class LatentStyledConv(nn.Module):
             upsample=upsample,
         )
         self.bn=nn.BatchNorm1d(out_channel)
-        self.noise = NoiseInjection()
         # self.bias = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
         # self.activate = ScaledLeakyReLU(0.2)
         self.activate = nn.LeakyReLU(out_channel)
 
-    def forward(self, input, style, noise=None):
+    def forward(self, input, style):
         out = self.bn(self.conv(input, style))
-        out = self.noise(out, noise=noise)
-        # out = out + self.bias
         out = self.activate(out)
         return out
 

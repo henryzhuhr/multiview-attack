@@ -91,32 +91,29 @@ COCO_CATEGORIES_MAP = {
 }
 
 
-
-
-
 class CroppedCOCO(data.Dataset):
     def __init__(
         self,
-        config: Union[str, dict] ,
+        config: Union[str, dict],
         is_train: bool = False,
         min_obj_size: int = 100,
         transform=None,
         load_all_class: bool = False, # rewrite the categories in config file
         show_detail=False,
     ):
-        
+
         # check config if it is a file path or a dict
         if isinstance(config, str):
             if not os.path.exists(config):
                 raise FileNotFoundError(f"config file {config} not found")
             with open(config, "r") as f:
                 config_dict = yaml.load(f, Loader=yaml.FullLoader)
-                config_dict=config_dict["coco"]            
+                config_dict = config_dict["coco"]
         elif isinstance(config, dict):
             config_dict = config["coco"]
         else:
             raise TypeError("config should be str(.yaml file path) or dict")
-        
+
         self.data_type = "train" if is_train else "val"
         self.coco_root = os.path.expanduser(config_dict["root"])
         coco = COCO(f"{self.coco_root}/annotations/instances_{self.data_type}2017.json")
@@ -125,7 +122,10 @@ class CroppedCOCO(data.Dataset):
         COCO_CATEGORIES_MAP = {cat['id']: cat['name'] for cat in cats}
 
         if not load_all_class and "categories" in config_dict:
-            categories = {cat['id']: cat['name'] for cat in cats if (cat['name'] in config_dict["categories"])}
+            categories = {
+                cat['id']: cat['name']
+                for cat in cats if ((cat['name'] in config_dict["categories"]) and cat['name'] != "car")
+            }
         else:
             categories = COCO_CATEGORIES_MAP
         # print('COCO (selected) categories:', len(categories))
@@ -223,10 +223,11 @@ class CroppedCOCO(data.Dataset):
 
         image = image.resize((nw, nh), Image.BICUBIC)          # 缩小图像
         new_image = Image.new('RGB', target_size, (0, 0, 0))   # 生成黑色图像
-                                                            # // 为整数除法，计算图像的位置
+                                                               # // 为整数除法，计算图像的位置
         new_image.paste(image, ((w - nw) // 2, (h - nh) // 2)) # 将图像填充为中间图像，两侧为灰色的样式
 
         return new_image
+
     def class_detail(self):
         class_dict = {}
         for i in range(self.__len__()):

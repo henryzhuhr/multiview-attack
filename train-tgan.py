@@ -48,22 +48,23 @@ torch.backends.cudnn.benchmark = True
 
 
 def train(args):
+    nowt = datetime.datetime.now().strftime("%m%d%H%M")
+    args.save_dir = args.save_dir + "-" + nowt
 
     # sample_save_dir = os.path.join("tmp", args.save_dir, "sample")
     os.makedirs(sample_save_dir := os.path.join("tmp", args.save_dir, "sample"), exist_ok=True)
     # checkpoint_save_dir = os.path.join("tmp", args.save_dir, "checkpoint")
     os.makedirs(checkpoint_save_dir := os.path.join("tmp", args.save_dir, "checkpoint"), exist_ok=True)
-    nowt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     logging.basicConfig(
         format='[%(levelname)s][%(asctime)s] %(message)s',
         level=logging.INFO,
-        filename=os.path.join("tmp", args.save_dir, f'train-{nowt}.log'),
+        filename=os.path.join("tmp", args.save_dir, f'train.log'),
         filemode='a',
     )
 
     (
-        neural_renderer, g_model, d_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
-        train_loader, mix_train_set, device
+        neural_renderer, g_model, detector, detector_eval, compute_detector_loss, g_optim, train_loader, mix_train_set,
+        device
     ) = prepare_training(args)
 
     with torch.no_grad():
@@ -83,9 +84,7 @@ def train(args):
             "\033[0m",
         )
 
-        g_loss_epoch = 0
-        loss_d_epoch, loss_smooth_epoch = 0, 0
-        loss_r1_epoch = 0
+        loss_smooth_epoch = 0
         lbox_epoch, lobj_epoch, lcls_epoch = 0, 0, 0
         det_loss_epoch = 0
         data_num = 0
@@ -94,9 +93,7 @@ def train(args):
 
         pbar = tqdm(train_loader)
         g_model.train()
-        d_model.train()
 
-        
         for i_mini_batch, batch_data in enumerate(pbar):
             cond_images = batch_data["coco"]["image"].to(device)
             coco_label = batch_data["coco"]["predict_id"].to(device)
@@ -105,60 +102,8 @@ def train(args):
             bs = cond_images.shape[0]
             data_num += bs
 
-            # ----------------------------------------
-            # perform backward
-            # ----------------------------------------
-            noise_rotio = 0.7
-            random_z = torch.randn_like(real_x).to(real_x.device)
-            # random_z = noise_rotio * random_z + (1 - noise_rotio) * real_x # add
-            ri = random.sample(range(real_x.shape[1]), int(real_x.shape[1] * (1 - noise_rotio)))
-            random_z[: ,ri] = real_x[: ,ri] # mask
+            random_z = real_x.clone()
 
-            # ----------------------------------------
-            #  train Discriminator
-            # ----------------------------------------
-            fake_latent = g_model.forward(random_z, coco_label)
-            real_pred = d_model.forward(g_model.encode(real_x))
-            fake_pred = d_model.forward(fake_latent)
-
-            requires_grad(g_model, False)
-            requires_grad(d_model, True)
-            is_d_loss = i_mini_batch % args.d_loss_every == 0
-            if is_d_loss:
-                # if False:
-                d_real_loss = F.softplus(-real_pred).mean()
-                d_fake_loss = F.softplus(fake_pred).mean()
-
-                d_loss = (d_real_loss + d_fake_loss)
-                loss_d_epoch += d_loss.item()
-
-                d_model.zero_grad()
-                d_loss.backward()
-                clip_grad_norm_(parameters=d_model.parameters(), max_norm=10, norm_type=2)
-                d_optim.step()
-
-            # ----------------------------------------
-            #   D regularization for every d_reg_every iterations
-            # ----------------------------------------
-            r1_loss = 0
-            if i_mini_batch % args.d_reg_every == 0:
-                # if False == 0:
-                real_x_latent = g_model.encode(real_x)
-                real_x_latent.requires_grad = True
-                real_pred = d_model.forward(real_x_latent)
-                r1_loss = d_r1_loss(real_pred, real_x_latent)
-
-                loss_r1_epoch += r1_loss.item() * bs
-
-                d_model.zero_grad()
-                r1_loss.backward()
-                d_optim.step()
-
-            # ----------------------------------------
-            #  train generator: frozen D
-            # ----------------------------------------
-            requires_grad(g_model, True)
-            requires_grad(d_model, False)
             if True:
                 fake_xs = g_model.decode(g_model.forward(random_z, coco_label))
                 _t = neural_renderer.textures.repeat(
@@ -168,7 +113,6 @@ def train(args):
                 fake_textures = _t
 
                 render_image_list, render_scene_list, render_label_list = [], [], []
-
                 for i_b in range(fake_textures.size(0)):
                     carla_scene_image = carla_scene_images[i_b]
                     crp = carla_render_params[i_b] # carla_render_param
@@ -190,25 +134,14 @@ def train(args):
                     render_scene_list.append(t_render_image.unsqueeze(0))
 
                     # find object label
-                    ret, binary = cv2.threshold(cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)   # yapf: disable
-                    contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                    _, binary = cv2.threshold(cv2.cvtColor(render_npimg, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)   # yapf: disable
+                    contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
                     find_boxes = []
                     for c in contours:
                         [x, y, w, h] = cv2.boundingRect(c)
                         find_boxes.append([x, y, x + w, y + h])
-                    is_find_box = len(find_boxes) > 0
                     fc = np.array(find_boxes)
                     box = [min(fc[:, 0]), min(fc[:, 1]), max(fc[:, 2]), max(fc[:, 3])] # [x1,y1,x2,y2]
-
-                    if False:
-                        [x1, y1, x2, y2] = box
-                        cv2.rectangle(scene_npimg, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-                        label = mix_train_set.COCO_CLASS[int(coco_label[i_b])]
-                        cv2.putText(scene_npimg, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-                        cv2.imwrite(os.path.join(sample_save_dir, f'render.png'), scene_npimg)
-                        # cv2.imwrite(os.path.join(sample_save_dir, f'render-{idx}.png'), scene_npimg)
 
                     # YOLOv5 label: [image_idx, class, x_center, y_center, width, height]
                     # why image_idx: [#253](https://github.com/ultralytics/yolov3/issues/253)
@@ -227,49 +160,35 @@ def train(args):
 
                 pred = detector.forward(render_images)
                 (det_loss, (lbox, lobj, lcls)) = compute_detector_loss.__call__(pred, render_labels)
-
+                lbox *= 0.05
+                lobj *= 1.0
+                lcls *= 0.5 * 1.5
                 lbox_epoch += lbox.item() * bs
                 lobj_epoch += lobj.item() * bs
                 lcls_epoch += lcls.item() * bs
                 det_loss_epoch += det_loss.item() * bs
+
+                loss_smooth = 0.05 * F.l1_loss(real_x, fake_xs)
+                loss_smooth_epoch += loss_smooth.item() * bs
+
+                loss_adv = lbox + lobj + lcls + loss_smooth
 
             g_model.zero_grad()
             det_loss.backward()
             clip_grad_norm_(parameters=g_model.parameters(), max_norm=10, norm_type=2)
             g_optim.step()
 
-            # ----------------------------------------
-            #   G regularization for every g_reg_every iterations
-            # ----------------------------------------
-            # if i_mini_batch % args.g_reg_every == 0:
-            #     fake_texture_latent, latents = generator.forward(
-            #         texture_latent_mix_noise, cond_latent, return_latents=True
-            #     )
-            #     path_loss, mean_path_length, path_lengths = g_path_regularize(
-            #         fake_texture_latent, latents, mean_path_length
-            #     )
-            #     generator.zero_grad()
-
-            #     weighted_path_loss = args.path_regularize * args.g_reg_every * path_loss
-            #     # if args.path_batch_shrink:
-            #     #     weighted_path_loss += 0 * fake_texture[0, 0, 0, 0]
-            #     weighted_path_loss.backward()
-            #     g_optim.step()
-            #     mean_path_length_avg = (reduce_sum(mean_path_length).item() / get_world_size())
-            #     loss_dict["path"] = path_loss
-            #     loss_dict["path_length"] = path_lengths.mean()
-
             # accumulate(g_ema, generator, accum)
 
             pbar.set_description(" ".join((
-                f"{cstr('D')}:{d_loss.item():.4f}",
+                # f"{cstr('adv')}:{loss_adv.item():.4f}",
+                # f"{cstr('Ls')}:{loss_smooth.item():.4f}",
                 f"{cstr('det')}:{det_loss.item():.4f}",
+                f"{cstr('lcls')}:{lcls.item():.4f}",
                 f"{cstr('lbox')}:{lbox.item():.4f}",
                 f"{cstr('lobj')}:{lobj.item():.4f}",
-                f"{cstr('lcls')}:{lcls.item():.4f}",
-                f"{cstr('Ls')}:{loss_smooth_epoch:.4f}",
-            )))# yapf:disable
 
+            )))# yapf:disable
 
 
         #  Valid
@@ -285,7 +204,9 @@ def train(args):
                 break
 
             with torch.no_grad():
-                fake_xs = g_model.decode(g_model.forward(torch.randn_like(real_x).to(real_x.device), coco_label))
+                random_z = real_x.clone()
+
+                fake_xs = g_model.decode(g_model.forward(random_z, coco_label))
                 tt = neural_renderer.textures.clone()
                 _t = tt.repeat(fake_xs.shape[0], *[1] * (len(tt.shape) - 1))
                 _t[:, neural_renderer.selected_faces, :] = fake_xs
@@ -296,7 +217,12 @@ def train(args):
                 _t[:, neural_renderer.selected_faces, :] = real_x
                 real_textures = _t
 
-                real_image_list, fake_image_list = [], []
+                tt = neural_renderer.textures.clone()
+                _t = tt.repeat(real_x.shape[0], *[1] * (len(tt.shape) - 1))
+                _t[:, neural_renderer.selected_faces, :] = torch.randn_like(real_x).to(real_x.device)
+                noise_textures = _t
+
+                real_image_list, fake_image_list,noise_images_list = [], [],[]
                 for i_b in range(fake_textures.size(0)):
                     carla_scene_image = carla_scene_images[i_b]
                     t_scene_image = torch.from_numpy(carla_scene_image).to(fake_textures.device).permute(2, 0, 1).float() / 255.  # yapf: disable
@@ -305,28 +231,30 @@ def train(args):
                     fake_texture = fake_textures[i_b].unsqueeze(0)
 
                     neural_renderer.set_render_perspective(crp["camera_transform"], crp["vehicle_transform"],crp["fov"])        # yapf: disable
-                    (r_rgb, _, r_alpha) = neural_renderer.renderer.forward(
-                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(real_textures)
-                    )
+                    (r_rgb, _, r_alpha) = neural_renderer.renderer.forward(neural_renderer.vertices, neural_renderer.faces, torch.tanh(real_textures)) # yapf: disable
                     r_render_image = r_alpha * r_rgb[0] + (1 - r_alpha) * t_scene_image
                     real_image_list.append(r_render_image.unsqueeze(0))
 
-                    (f_rgb, _, f_alpha) = neural_renderer.renderer.forward(
-                        neural_renderer.vertices, neural_renderer.faces, torch.tanh(fake_texture)
-                    )
+                    (f_rgb, _, f_alpha) = neural_renderer.renderer.forward(neural_renderer.vertices, neural_renderer.faces, torch.tanh(fake_texture)) # yapf: disable
                     f_render_image = f_alpha * f_rgb[0] + (1 - f_alpha) * t_scene_image
                     fake_image_list.append(f_render_image.unsqueeze(0))
+
+                    (n_rgb, _, n_alpha) = neural_renderer.renderer.forward(neural_renderer.vertices, neural_renderer.faces, torch.tanh(noise_textures)) # yapf: disable
+                    n_render_image = n_alpha * n_rgb[0] + (1 - n_alpha) * t_scene_image
+                    noise_images_list.append(n_render_image.unsqueeze(0))
                 real_images = torch.cat(real_image_list, dim=0).to(device)
                 fake_images = torch.cat(fake_image_list, dim=0).to(device)
+                noise_images = torch.cat(noise_images_list, dim=0).to(device)
 
                 with torch.no_grad():
-                    r_pred = detector_eval.forward(real_images)
-                    f_pred = detector_eval.forward(fake_images)
+                    r_pred = detector_eval.forward(real_images)  # real
+                    f_pred = detector_eval.forward(fake_images)  # fake
+                    n_pred = detector_eval.forward(noise_images) # noise
 
                 conf_thres, iou_thres = 0.25, 0.6
-                r_pred = non_max_suppression(r_pred, conf_thres, iou_thres, None, False)
+
                 r_result_imgs = []
-                for i_b, det in enumerate(r_pred):
+                for i_b, det in enumerate(non_max_suppression(r_pred, conf_thres, iou_thres, None, False)):
                     cv_img = np.ascontiguousarray(real_images[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
                     if len(det):
                         for *xyxy, conf, cls in det:
@@ -336,9 +264,8 @@ def train(args):
                             cv2.putText(cv_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     r_result_imgs.append(cv_img)
 
-                f_pred = non_max_suppression(f_pred, conf_thres, iou_thres, None, False)
                 f_result_imgs = []
-                for i_b, det in enumerate(f_pred):
+                for i_b, det in enumerate(non_max_suppression(f_pred, conf_thres, iou_thres, None, False)):
                     cv_img = np.ascontiguousarray(fake_images[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
                     if len(det):
                         for *xyxy, conf, cls in det:
@@ -348,7 +275,21 @@ def train(args):
                             cv2.putText(cv_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     f_result_imgs.append(cv_img)
 
-                result_imgs = [cv2.hconcat([r_result_imgs[i], f_result_imgs[i]]) for i in range(len(r_result_imgs))]
+                n_result_imgs = []
+                for i_b, det in enumerate(non_max_suppression(n_pred, conf_thres, iou_thres, None, False)):
+                    cv_img = np.ascontiguousarray(noise_images[i_b].detach().cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)#yapf:disable
+                    if len(det):
+                        for *xyxy, conf, cls in det:
+                            label = '%s %.2f' % (mix_train_set.COCO_CLASS[int(cls)], conf)
+                            x1, y1, x2, y2 = [int(xy) for xy in xyxy]
+                            cv2.rectangle(cv_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                            cv2.putText(cv_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    n_result_imgs.append(cv_img)
+
+                result_imgs = [
+                    cv2.hconcat([r_result_imgs[i], f_result_imgs[i], n_result_imgs[i]])
+                    for i in range(len(r_result_imgs))
+                ]
 
                 rows = cols = int(math.log2(len(result_imgs)))
                 img_height, img_width = result_imgs[0].shape[: 2]
@@ -359,35 +300,30 @@ def train(args):
                         if img_idx < len(result_imgs):
                             concatenated_image[i * img_height :(i + 1) * img_height,
                                                j * img_width :(j + 1) * img_width] = result_imgs[img_idx]
-                cv2.imwrite(os.path.join(sample_save_dir, f'detect.png'), concatenated_image)
+                cv2.imwrite(os.path.join(sample_save_dir, f'_detect.png'), concatenated_image)
                 cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}.png'), concatenated_image)
-
+                [cv2.imwrite(os.path.join(sample_save_dir, f'detect-{epoch}_{i_img}.png'), result_imgs[i]) for i_img in range(len(result_imgs))]
 
         epoch_loss_dict = {
-            "D": loss_d_epoch / data_num * args.d_loss_every,
+                                                # "All": (det_loss_epoch + loss_smooth_epoch) / data_num,
             "Det": det_loss_epoch / data_num,
+                                                # "Ls": loss_smooth_epoch / data_num,
+            "lcls": lcls_epoch / data_num,
             "lbox": lbox_epoch / data_num,
             "lobj": lobj_epoch / data_num,
-            "lcls": lcls_epoch / data_num,
-            "Ls": loss_smooth_epoch / data_num * args.d_loss_every,
         }
 
         logging.info(" ".join(["epoch:%-4d" % epoch] + [f"{k}:{v:.5f}" for k, v in epoch_loss_dict.items()]))
         print(" ".join([f"\033[00;34m{k}\033[0m:{v:.5f}" for k, v in epoch_loss_dict.items()]))
         print()
 
-        if i % args.valid_every == 0:
-            torch.save(
-                {
-                    "g": g_model.state_dict(),
-                                                               # "d": d_module.state_dict(),
-                                                               # "g_ema": g_ema.state_dict(),
-                    "g_optim": g_optim.state_dict(),
-                                                               # "d_optim": d_optim.state_dict(),
-                    "args": args,
-                },
-                f"{checkpoint_save_dir}/{str(i).zfill(6)}.pt",
-            )
+        torch.save(
+            {
+                "g": g_model.state_dict(),
+                "g_optim": g_optim.state_dict(),
+                "args": args
+            }, f"{checkpoint_save_dir}/gan-{epoch}.pt"
+        )
 
 
 def prepare_training(args):
@@ -468,25 +404,12 @@ def prepare_training(args):
         cond_dim=len(mix_train_set.COCO_CLASS),
         mix_prob=args.mix_prob,
     ).cuda().train()
-    d_model = Discriminator(latent_dim=args.latent_dim, cond_dim=len(mix_train_set.COCO_CLASS)).cuda().train()
-
-    g_reg_ratio = args.g_reg_every / (args.g_reg_every + 1)
-    d_reg_ratio = args.d_reg_every / (args.d_reg_every + 1)
-
-    g_optim = optim.Adam(
-        g_model.parameters(),
-        lr=args.lr * g_reg_ratio,
-        betas=(0**g_reg_ratio, 0.99**g_reg_ratio),
-    )
-    d_optim = optim.Adam(
-        d_model.parameters(),
-        lr=args.lr * d_reg_ratio,
-        betas=(0**d_reg_ratio, 0.99**d_reg_ratio),
-    )
+    g_optim = optim.Adam(g_model.parameters(), lr=args.lr, betas=(0, 0.99))
+    # lr_heduler = optim.lr_scheduler.CosineAnnealingLR(g_optim, args.max_iter, eta_min=0)
 
     return (
-        neural_renderer, g_model, d_model, detector, detector_eval, compute_detector_loss, g_optim, d_optim,
-        train_loader, mix_train_set, device
+        neural_renderer, g_model, detector, detector_eval, compute_detector_loss, g_optim, train_loader, mix_train_set,
+        device
     )
 
 

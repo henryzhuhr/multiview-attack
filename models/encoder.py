@@ -1,159 +1,93 @@
+import math
+from typing import Tuple
 import torch
-from torch import nn
-
-from einops import rearrange, repeat
-from einops.layers.torch import Rearrange
-
-# helpers
-
-
-def pair(t):
-    return t if isinstance(t, tuple) else (t, t)
+from torch import nn, Tensor
+import torch.nn.parallel
+import torch.utils.data
+from torch.autograd import Variable
+import numpy as np
+import torch.nn.functional as F
+import clip
+import kornia
 
 
-# classes
+class STNkd(nn.Module):
+    def __init__(self, k=192):
+        super(STNkd, self).__init__()
+        self.conv1 = nn.Conv1d(k, 64, 1)
+        self.conv2 = nn.Conv1d(64, 128, 1)
+        self.conv3 = nn.Conv1d(128, 1024, 1)
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, k * k)
+        self.act = nn.LeakyReLU()
 
+        self.k = k
 
-class PreNorm(nn.Module):
-    def __init__(self, dim, fn):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-        self.fn = fn
+    def forward(self, x: Tensor):
+        B = x.size(0)
+        x = self.act(self.conv1(x))
+        x = self.act(self.conv2(x))
+        x = self.act(self.conv3(x))
+        x = torch.max(x, 2, keepdim=True)[0]
+        x = x.view(-1, 1024)
 
-    def forward(self, x, **kwargs):
-        return self.fn(self.norm(x), **kwargs)
+        x = self.act(self.fc1(x))
+        x = self.act(self.fc2(x))
+        x = self.fc3(x)
 
-
-class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, dropout=0.):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden_dim, dim), nn.Dropout(dropout)
-        )
-
-    def forward(self, x):
-        return self.net(x)
-
-
-class Attention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
-        super().__init__()
-        inner_dim = dim_head * heads
-        project_out = not (heads == 1 and dim_head == dim)
-
-        self.heads = heads
-        self.scale = dim_head**-0.5
-
-        self.attend = nn.Softmax(dim=-1)
-        self.dropout = nn.Dropout(dropout)
-
-        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
-
-        self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout)) if project_out else nn.Identity()
-
-    def forward(self, x):
-        qkv = self.to_qkv(x).chunk(3, dim=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
-
-        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-
-        attn = self.attend(dots)
-        attn = self.dropout(attn)
-
-        out = torch.matmul(attn, v)
-        out = rearrange(out, 'b h n d -> b n (h d)')
-        return self.to_out(out)
-
-
-class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
-        super().__init__()
-        self.layers = nn.ModuleList([])
-        for _ in range(depth):
-            self.layers.append(
-                nn.ModuleList(
-                    [
-                        PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                        PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout))
-                    ]
-                )
-            )
-
-    def forward(self, x: torch.Tensor):
-        for attn, ff in self.layers:
-            x = attn(x) + x
-            x = ff(x) + x
+        iden = torch.from_numpy(np.eye(self.k).flatten().astype(np.float32)).view(1, self.k * self.k).repeat(B, 1)
+        iden = iden.to(x.device)
+        x = x + iden
+        x = x.view(-1, self.k, self.k)
         return x
+
 
 class TextureEncoder(nn.Module):
     def __init__(
         self,
-        npoint: int = 12306,
-        sample_point: int = 1024,
-        ts: int = 4,         # texture size
-        dim: int = 512,
-    ) -> None:
-        super().__init__()
+        num_feature: int = 4,
+        latent_dim: int = 512, # lantent size
+    ):
+        super(TextureEncoder, self).__init__()
+        self.latent_dim = latent_dim
 
-        feature_dim = ts * ts * ts * 3
-        latent_dim = 128
-        self.to_embedding = nn.Sequential(
-            Rearrange('b n t1 t2 t3 c -> b n (t1 t2 t3 c)'),
-            nn.LayerNorm(feature_dim),
-            nn.Linear(feature_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
-            nn.Conv1d(npoint, sample_point, 1),
-        )
+        self.stn_kd = STNkd(num_feature * num_feature * num_feature * 3)
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, sample_point + 1, latent_dim ))
-        self.cls_token = nn.Parameter(torch.randn(1, 1, latent_dim))
-        self.dropout = nn.Dropout(0.1)
+        in_channel = num_feature * num_feature * num_feature * 3
+        self.conv1 = nn.Conv1d(in_channel, in_channel, 1)
+        self.conv2 = nn.Conv1d(in_channel, 512, 1)
+        self.conv3 = nn.Conv1d(512, 512, 1)
+        self.conv4 = nn.Conv1d(512, 1024, 1)
 
-        self.transformer = Transformer(latent_dim, depth=1, heads=2, dim_head=64, mlp_dim=256, dropout=0.1)
+        # mean
+        self.fc1 = nn.Linear(1024, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.fc3 = nn.Linear(512, latent_dim)
 
+        self.act = nn.ReLU()
 
-        self.identity = nn.Identity()
+    def forward(self, x: Tensor):
+        # Transform data format
+        B, N, Ts, Ts, Ts, C = x.size()
+        x = x.view(B, N, -1, C)
+        x = x.view(B, N, -1)
+        x = x.permute(0, 2, 1)
 
-        self.to_latent = nn.Sequential(nn.LayerNorm(latent_dim), nn.Linear(latent_dim, dim))
+        trans = self.stn_kd.forward(x)
 
-    def forward(self, x: torch.Tensor):
-        x = self.to_embedding(x)
+        x = torch.bmm(trans, x)
 
-        b, n, _ = x.shape
+        x = self.act(self.conv1(x))
+        x = self.act(self.conv2(x))
+        x = self.act(self.conv3(x))
+        x = self.conv4(x) # [B, 1024, 1]
 
-        cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, :(n + 1)]
-        x = self.dropout(x)
+        x = torch.max(x, 2, keepdim=True)[0] # [B, 1024, 1]
+        x = x.view(-1, 1024)
 
-        x = self.transformer(x)
-
-        x = x.mean(dim=1) 
-
-        x = self.identity(x)
-        x = self.to_latent(x)
+        x = self.act(self.fc1(x)) # [B, 1024]
+        x = self.act(self.fc2(x)) # [B, 1024]
+        x = self.fc3(x)           # [B, 1024]
 
         return x
-
-
-if __name__ == '__main__':
-    "https://blog.csdn.net/weixin_44966641/article/details/118733341"
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    print("============")
-
-    print("\033[00;34m")
-    with open('data/models/selected_faces.txt', 'r') as f:
-        selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
-    x = torch.randn(8, 12306, 4, 4, 4, 3).to(device)
-    x = x[:, selected_faces]
-    print("x", x.shape)
-    model = TextureEncoder(
-        npoint=x.shape[1],
-        ts=4,               # texture size
-        dim=512,
-    ).to(device)
-    model.eval()
-    for i in range(100000):
-        y = model.forward(x)
-        print(y.shape)

@@ -84,7 +84,7 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
         coco_sample = super().__getitem__(index)
         # carla
         # carla_sample_obj = random.choice(self.carla_label_list)
-        carla_sample_obj = self.carla_label_list[index % len(self.carla_label_list)]
+        carla_sample_obj = random.choice(self.carla_label_list)
 
         img_file = os.path.join(self.carla_dir.images_dir, f"{carla_sample_obj['name']}.png")
         assert os.path.exists(img_file), f"image file {img_file} not exists"

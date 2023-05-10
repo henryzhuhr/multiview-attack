@@ -4,13 +4,12 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .encoder import TextureEncoder
+from .vit import TextureEncoder
 from .decoder import TextureDecoder
 from .layers import (
     LatentResBlock,
     LatentStyledConv,
     PixelNorm,
-    EqualLinear,
     ToRGB,
     ConstantInput,
 )
@@ -19,26 +18,18 @@ from .layers import (
 class Generator(nn.Module):
     def __init__(
         self,
-        style_dim: int = 1024, # latent dim
+        style_dim: int = 1024,  # latent dim
         cond_dim: int = 80,
         latent_dim: int = 1024,
-        mix_prob=0.9,
+        mix_prob=0.8,
     ):
         super().__init__()
 
         self.size = size = 1024
         self.cond_dim = cond_dim
-        self.embedding_matrix = nn.Parameter(torch.randn(cond_dim, style_dim))
+        self.embedding_layer = nn.Linear(cond_dim, style_dim)
 
         self.style_dim = style_dim
-
-        # G_Mapping network from z -> w
-        n_mlp = 4
-        layers = [PixelNorm()]
-        for i in range(n_mlp):
-            layers.append(nn.Linear(style_dim, style_dim))
-            layers.append(nn.LeakyReLU())
-        self.style = nn.Sequential(*layers)
 
         channel_multiplier = 2
         self.channels = {
@@ -61,21 +52,16 @@ class Generator(nn.Module):
         self.log_size = int(math.log(size, 2))
         self.num_layers = (self.log_size - 2) * 2 + 1
 
-        self.convs = nn.ModuleList()
+        
         self.upsamples = nn.ModuleList()
+        self.convs = nn.ModuleList()
         self.to_rgbs = nn.ModuleList()
-        self.noises = nn.Module()
-        self.latent_noises = nn.Module()
 
         in_channel = self.channels[4]
 
-        for layer_idx in range(self.num_layers):
-            res = (layer_idx + 5) // 2
-            self.latent_noises.register_buffer(f"noise_{layer_idx}", torch.randn(*[1, 1, 2**res]))
-
         for i in range(3, self.log_size + 1):
             out_channel = self.channels[2**i]
-            self.convs.append(LatentStyledConv(in_channel, out_channel, 3, style_dim, upsample=True))
+            self.upsamples.append(LatentStyledConv(in_channel, out_channel, 3, style_dim, upsample=True))
             self.convs.append(LatentStyledConv(out_channel, out_channel, 3, style_dim))
             self.to_rgbs.append(ToRGB(out_channel, style_dim))
             in_channel = out_channel
@@ -98,27 +84,17 @@ class Generator(nn.Module):
 
     def forward(
         self,
-        x: torch.Tensor,                                     # [B, 1024]
-        y: torch.Tensor,                                     # [B, num_classes] onehot
+        latent_x: torch.Tensor, # [B, 1024]
+        y: torch.Tensor,        # [B, num_classes] onehot
     ):
-        cond_latent = torch.mm(
-            F.one_hot(y, num_classes=self.cond_dim).float(),
-            self.embedding_matrix,
-        )
-        styles = [
-            self.style(s) for s in [
-                x,                                           # styles[0]
-                cond_latent,                                 # styles[1]
-            ]
-        ]
-
-        noise = [getattr(self.latent_noises, f"noise_{i}") for i in range(self.num_layers)]
+        cond_latent = self.embedding_layer(F.one_hot(y, num_classes=self.cond_dim).float())
 
         # TODO: 输入的两个latent 进行融合
-        inject_index = self.inject_index
-        latent = styles[0].unsqueeze(1).repeat(1, inject_index, 1)
-        latent2 = styles[1].unsqueeze(1).repeat(1, self.n_latent - inject_index, 1)
-        latent = torch.cat([latent, latent2], 1) # [B, 18, 512]
+        # inject_index = self.inject_index
+        # latent = latent_x.unsqueeze(1).repeat(1, inject_index, 1)
+        # latent2 = cond_latent.unsqueeze(1).repeat(1, self.n_latent - inject_index, 1)
+        # latent = torch.cat([latent, latent2], 1) # [B, 18, 512]
+        latent = cond_latent.unsqueeze(1).repeat(1, self.n_latent, 1)
 
         # TODO: 这里应该指的是style mixing，在第i层前用A图的latent code控制生图的低分辨率特征；
         # 在第i层后用B图的latent code控制高分辨率图特征，从而混合了A、B两张图
@@ -133,20 +109,18 @@ class Generator(nn.Module):
         out = self.input(latent)
         # print(logheader(),"latent",latent.shape)
 
-        out = self.conv1(out, latent[:, 0], noise=noise[0])
+        out = self.conv1(out, latent[:, 0])
         skip: torch.Tensor = self.to_rgb1(out, latent[:, 1])
 
         i = 1
-        for i, (conv1, conv2, noise1, noise2, to_rgb) in enumerate(zip(
-            self.convs[:: 2],    # from index 0, step=2
-            self.convs[1 :: 2],
-            noise[1 :: 2],
-            noise[2 :: 2],
+        for i, (upsample, conv, to_rgb) in enumerate(zip(
+            self.upsamples[:: 1],    # from index 0, step=2
+            self.convs[:: 1],
             self.to_rgbs,
         )): # yapf: disable
 
-            out = conv1(out, latent[:, i], noise=noise1)
-            out = conv2(out, latent[:, i + 1], noise=noise2)
+            out = upsample(out, latent[:, i])
+            out = conv(out, latent[:, i + 1])
             skip = to_rgb(out, latent[:, i + 2], skip)
             i += 2
 
@@ -169,7 +143,7 @@ class Discriminator(nn.Module):
             nn.BatchNorm1d(h_dim // 4),
             nn.LeakyReLU(0.2, inplace=True),
         )
-        self.fc = EqualLinear(h_dim // 4, 1, activation=False)
+        self.fc = nn.Linear(h_dim // 4, 1)
         for m in self.modules():
             if isinstance(m, (nn.Conv1d, nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_normal_(m.weight)

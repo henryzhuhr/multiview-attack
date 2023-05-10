@@ -17,8 +17,7 @@ export OMP_NUM_THREADS=8
 export CUDA_VISIBLE_DEVICES=0
 
 python train-tgan.py  \
-    --save_dir tsgan \
+    --save_dir lsgan \
     --obj_model data/models/vehicle-YZ.obj \
-    --selected_faces data/models/faces-less.txt \
-    --batch 8 --epochs 2000 --lr 0.02 \
-    --d_loss_every 16 --d_reg_every 32
+    --selected_faces data/models/faces-std.txt \
+    --batch 8 --epochs 2000 --lr 0.02
