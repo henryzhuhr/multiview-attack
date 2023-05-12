@@ -155,7 +155,7 @@ class LatentStyledConv(nn.Module):
         self.bn=nn.BatchNorm1d(out_channel)
         # self.bias = nn.Parameter(torch.zeros(1, out_channel, 1, 1))
         # self.activate = ScaledLeakyReLU(0.2)
-        self.activate = nn.LeakyReLU(out_channel)
+        self.activate = nn.LeakyReLU(0.2)
 
     def forward(self, input, style):
         out = self.bn(self.conv(input, style))
@@ -185,9 +185,9 @@ class LatentResBlock(nn.Module):
     def __init__(self, in_channel, out_channel):
         super().__init__()
         self.fc1 = nn.Linear(in_channel, in_channel)
-        self.act1=nn.LeakyReLU()
+        self.act1=nn.LeakyReLU(0.2)
         self.fc2 = nn.Linear(in_channel, out_channel)
-        self.act2=nn.LeakyReLU()
+        self.act2=nn.LeakyReLU(0.2)
         self.skip = nn.Linear(in_channel, out_channel, bias=False)
 
     def forward(self, x:Tensor):

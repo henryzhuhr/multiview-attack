@@ -173,8 +173,9 @@ class ComputeLoss:
         # lobj *= self.hyp['obj']
         # lcls *= self.hyp['cls']
         bs = tobj.shape[0]  # batch size
+        ldet=self.hyp['box']*lbox + self.hyp['obj']*lobj + self.hyp['cls']*lcls
 
-        return [(lbox + lobj + lcls) , [lbox , lobj , lcls ]]
+        return [ldet , [lbox , lobj , lcls ]]
 
     def build_targets(self, p, targets):
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)

@@ -1,20 +1,14 @@
 from typing import List
 import numpy as np
 import torch
-from torch import Tensor, nn
+from torch import  nn
 
 import neural_renderer
-import math
 
 from ..types.carla import (Location, Rotation, Transform)
 
 
 class NeuralRenderer(nn.Module):
-    """
-    This is the core pytorch function to call.
-    Every torch NMR has a chainer NMR.
-    Only fwd/bwd once per iteration.
-    """
     def __init__(self, obj_model, selected_faces: List[int] = None, texture_size=6, image_size=800, device="cuda"):
         super(NeuralRenderer, self).__init__()
 
@@ -28,25 +22,23 @@ class NeuralRenderer(nn.Module):
             texture_size=texture_size, # 渲染纹理尺寸 越大渲染纹理精度越高
             load_texture=True,
         )
-        vertices: Tensor = vertices.to(device)
-        faces: Tensor = faces.to(device)
-        textures: Tensor = textures.to(device)
-        self.vertices = vertices.unsqueeze(0).to(device)
-        self.faces = faces.unsqueeze(0).to(device)
-        self.textures = textures.unsqueeze(0).to(device)
+        self.register_buffer('vertices', vertices.unsqueeze(0))
+        self.register_buffer('faces', faces.unsqueeze(0))
+        self.register_buffer('textures', textures.unsqueeze(0))
 
         self.selected_faces = selected_faces
 
         textures_mask = torch.zeros_like(textures).bool().to(device)
         if selected_faces is not None:
             for face_id in selected_faces:
-                textures_mask[face_id , :, :, :, :] = True
+                textures_mask[face_id, :, :, :, :] = True
         else:
             textures_mask = ~textures_mask
         self.textures_mask = textures_mask.int()
-        render_textures = textures * self.textures_mask
+        # render_textures = textures * self.textures_mask
+
         
-        self.render_textures = nn.Parameter(render_textures.unsqueeze(0)).to(device) # 待渲染的纹理 (优化参数)
+        self.render_textures = nn.Parameter(textures.unsqueeze(0).clone()) # 待渲染的纹理 (优化参数)
 
         # 初始化渲染器
         self.renderer = neural_renderer.Renderer(
@@ -69,8 +61,10 @@ class NeuralRenderer(nn.Module):
         Returns:
             images: B X 3 x 256 X 256 numpy array
         '''
-        image, _, _ = self.renderer.forward(self.vertices, self.faces, torch.tanh(self.render_textures))
-        return image
+        return self.renderer.forward(
+            self.vertices, self.faces,
+            torch.tanh(self.textures) if textures is None else torch.tanh(textures)
+        )
 
     def set_render_perspective(
         self,

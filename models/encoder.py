@@ -65,7 +65,7 @@ class TextureEncoder(nn.Module):
         self.fc2 = nn.Linear(1024, 512)
         self.fc3 = nn.Linear(512, latent_dim)
 
-        self.act = nn.ReLU()
+        self.act = nn.LeakyReLU(0.2)
 
     def forward(self, x: Tensor):
         # Transform data format
@@ -86,8 +86,8 @@ class TextureEncoder(nn.Module):
         x = torch.max(x, 2, keepdim=True)[0] # [B, 1024, 1]
         x = x.view(-1, 1024)
 
-        x = self.act(self.fc1(x)) # [B, 1024]
-        x = self.act(self.fc2(x)) # [B, 1024]
-        x = self.fc3(x)           # [B, 1024]
+        x = self.act(self.fc1(x))    # [B, 1024]
+        x = self.act(self.fc2(x))    # [B, 1024]
+        x = self.fc3(x) # [B, 1024]
 
         return x

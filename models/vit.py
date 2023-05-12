@@ -85,12 +85,13 @@ class Transformer(nn.Module):
             x = ff(x) + x
         return x
 
+
 class TextureEncoder(nn.Module):
     def __init__(
         self,
-        npoint: int = 12306,
+        nt: int = 12306,
         sample_point: int = 1024,
-        ts: int = 4,         # texture size
+        ts: int = 4,              # texture size
         dim: int = 512,
     ) -> None:
         super().__init__()
@@ -102,16 +103,16 @@ class TextureEncoder(nn.Module):
             nn.LayerNorm(feature_dim),
             nn.Linear(feature_dim, latent_dim),
             nn.LayerNorm(latent_dim),
-            nn.Conv1d(npoint, sample_point, 1),
+            nn.Conv1d(nt, sample_point, 1),
         )
 
-        self.pos_embedding = nn.Parameter(torch.randn(1, sample_point + 1, latent_dim ))
+        self.pos_embedding = nn.Parameter(torch.randn(1, sample_point + 1, latent_dim))
         self.cls_token = nn.Parameter(torch.randn(1, 1, latent_dim))
         self.dropout = nn.Dropout(0.1)
 
         self.transformer = Transformer(latent_dim, depth=1, heads=2, dim_head=64, mlp_dim=256, dropout=0.1)
         self.identity = nn.Identity()
-        self.to_latent = nn.Sequential(nn.LayerNorm(latent_dim), nn.Linear(latent_dim, dim))
+        self.to_latent = nn.Sequential(nn.LayerNorm(latent_dim), nn.Linear(latent_dim, dim), nn.ReLU())
 
     def forward(self, x: torch.Tensor):
         x = self.to_embedding(x)
@@ -125,18 +126,18 @@ class TextureEncoder(nn.Module):
 
         x = self.transformer(x)
 
-        x = x.mean(dim=1) 
+        x = x.mean(dim=1)
 
         x = self.identity(x)
         x = self.to_latent(x)
 
-        return x
+        return (x)
 
 
 if __name__ == '__main__':
     "https://blog.csdn.net/weixin_44966641/article/details/118733341"
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
+
     print("============")
 
     print("\033[00;34m")
@@ -146,7 +147,7 @@ if __name__ == '__main__':
     x = x[:, selected_faces]
     print("x", x.shape)
     model = TextureEncoder(
-        npoint=x.shape[1],
+        nt=x.shape[1],
         ts=4,               # texture size
         dim=512,
     ).to(device)

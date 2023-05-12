@@ -6,18 +6,21 @@ echo -e "\n\033[01;36m[ENV]$(which python) \033[0m\n"
 
 
 
-export CUDA_VISIBLE_DEVICES=0,1
+
 export NCCL_P2P_DISABLE=1
 export OMP_NUM_THREADS=8
 
-# python train-AE.py
-# python -m torch.distributed.launch --nproc_per_node=2 train-stylegan2.py \
-#     --ckpt tmp/550000.pt
-
 export CUDA_VISIBLE_DEVICES=0
 
+# rm -rf tmp/autoencoder
+# python train-AE.py \
+#     --obj_model data/models/vehicle-YZ.obj \
+#     --selected_faces data/models/faces-std.txt \
+#     --latent_dim 1024 
+
 python train-tgan.py  \
-    --save_dir lsgan \
+    --save_dir generator \
     --obj_model data/models/vehicle-YZ.obj \
     --selected_faces data/models/faces-std.txt \
-    --batch 8 --epochs 2000 --lr 0.02
+    --pretrained tmp/autoencoder/autoencoder.pt \
+    --batch 8 --epochs 2000 --lr 0.1

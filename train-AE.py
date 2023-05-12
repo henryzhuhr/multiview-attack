@@ -15,8 +15,7 @@ from torch.nn import functional as F
 import tsgan
 from tsgan.render import NeuralRenderer
 from tsgan import types
-import neural_renderer as nr
-from tsgan.models.autoencoder import TextureAutoEncoder
+from models.gan import TextureGenerator
 
 
 class TypeArgs(metaclass=abc.ABCMeta):
@@ -41,19 +40,21 @@ class TypeArgs(metaclass=abc.ABCMeta):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
+    parser.add_argument('--selected_faces', type=str, default='data/models/faces-std.txt')
     parser.add_argument('--texture_size', type=int, default=4)
-    parser.add_argument('--latent_dim', type=int, default=2048)
+    parser.add_argument('--latent_dim', type=int, default=1024)
     parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
     parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
 
-    parser.add_argument('--epoches', type=int, default=200000)
+    parser.add_argument('--epoches', type=int, default=10000)
     parser.add_argument('--lr', type=float, default=0.1)
-    parser.add_argument('--milestones', type=List[int], default=[10000, 100000])
+    parser.add_argument('--milestones', type=List[int], default=[8000, 60000])
     parser.add_argument('--device', type=str, default='cuda')
 
-    parser.add_argument('--save_dir', type=str, default='tmp/nAE')
+    parser.add_argument('--save_interval', type=int, default=1000)
+    parser.add_argument('--save_dir', type=str, default='tmp/autoencoder')
     parser.add_argument('--save_name', type=str, default='autoencoder')
-    parser.add_argument('--save_interval', type=int, default=2000)
+
     parser.add_argument('--pretained', type=str, default=None) #"tmp/nAE/autoencoder.pt")
     return parser.parse_args()
 
@@ -73,7 +74,7 @@ def main():
 
     # Load Neural Renderer
     ts = args.texture_size
-    with open('data/models/selected_faces.txt', 'r') as f:
+    with open(args.selected_faces, "r") as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     neural_renderer = NeuralRenderer(
         args.obj_model, selected_faces=selected_faces, texture_size=ts, image_size=800, device=args.device
@@ -83,30 +84,41 @@ def main():
     neural_renderer.set_render_perspective(camera_transform, vehicle_transform, fov)
 
     x_t = neural_renderer.textures[:, selected_faces, :]
+    x_t = x_t.repeat(bs := 8, 1, 1, 1, 1, 1)
 
-    npoint = x_t.shape[1]
-    print('textures num:%d (%d selected)' % (neural_renderer.textures.shape[1], npoint))
+    nt = x_t.shape[1]
+    print('textures num:%d (%d selected)' % (neural_renderer.textures.shape[1], nt))
 
     # Load Model
-    autoencoder = TextureAutoEncoder(npoint=npoint, sample_point=1024, ts=args.texture_size,
-                                     dim=args.latent_dim).to(args.device)
-    optimizer = optim.SGD(autoencoder.parameters(), lr=args.lr)
+    model = TextureGenerator(
+        nt=nt,
+        ts=args.texture_size,
+        style_dim=args.latent_dim,
+    ).cuda().train()
+    optimizer = optim.SGD(
+        [{
+            'params': model.encoder.parameters(),
+        }, {
+            'params': model.decoder.parameters(),
+        }], lr=args.lr
+    )
     lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, args.milestones, gamma=0.1)
 
-    autoencoder.train()
+    model.train()
     pabr = tqdm.tqdm(range(args.epoches))
     iter_loss = 0.
     iter_num = 0
     for iter in pabr:
         # Add noise to texture, range [l,h]
-        nrotio = np.clip(np.abs(np.random.normal(0, 0.6)), 0.01, 0.6) if iter > 4000 else 0.01
-        x_in = (1 - nrotio) * x_t + nrotio * torch.randn_like(x_t)
+        nrotio = np.random.uniform(0.5,1.0)
+        # nrotio = 0.5
+        x_in = (1 - nrotio) * x_t + nrotio * torch.rand_like(x_t)
 
         optimizer.zero_grad()
         # --- forward ---
-        latent_x = autoencoder.encode(x_in)
-        x_rec = autoencoder.decode(latent_x)
-        loss = F.l1_loss(x_in, x_rec)
+        latent_x = model.encode(x_in)
+        x_rec = model.decode(latent_x)
+        loss = F.l1_loss(x_t, x_rec)
 
         iter_loss += loss.item()
         iter_num += 1
@@ -119,20 +131,24 @@ def main():
             f"lr:{optimizer.state_dict()['param_groups'][0]['lr']:.4f} "
             f"loss:{loss.item():.4f} "
             f"nrotio:{nrotio:.4f} "
-            f"npoint:{npoint}"
+            f"npoint:{nt}"
         )
 
         if iter % args.save_interval == 0:
-            print(f"iter:{iter}", f"arg_loss:{(iter_loss / iter_num):.4f}", f"nrotio:{nrotio:.4f}", f"npoint:{npoint}","\n")
+            print(
+                f"iter:{iter}", f"arg_loss:{(iter_loss / iter_num):.4f}", f"nrotio:{nrotio:.4f}", f"npoint:{nt}", "\n"
+            )
             iter_loss = 0.0
             iter_num = 0
-            merged_img = cv2.hconcat([render_a_image(neural_renderer, image, X) for X in (x_in, x_rec)])
+            merged_img = cv2.hconcat(
+                [render_a_image(neural_renderer, image, X) for X in (x_in[0].squeeze(0), x_rec[0].squeeze(0))]
+            )
 
             cv2.imwrite(os.path.join(args.save_dir, f'{args.save_name}.png'), merged_img)
             cv2.imwrite(os.path.join(args.save_dir, f'{args.save_name}-{iter}.png'), merged_img)
 
-            torch.save({"model": autoencoder.state_dict()}, os.path.join(args.save_dir, f'{args.save_name}-{iter}.pt'))
-            torch.save({"model": autoencoder.state_dict()}, os.path.join(args.save_dir, f'{args.save_name}.pt'))
+            torch.save(model.state_dict(), os.path.join(args.save_dir, f'{args.save_name}-{iter}.pt'))
+            torch.save(model.state_dict(), os.path.join(args.save_dir, f'{args.save_name}.pt'))
 
 
 def render_a_image(neural_renderer: NeuralRenderer, image: cv2.Mat, x_t: Tensor):

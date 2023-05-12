@@ -7,7 +7,9 @@ from torch.nn import functional as F
 from .vit import TextureEncoder
 from .decoder import TextureDecoder
 from .layers import (
+    LatentResBlock,
     LatentStyledConv,
+    PixelNorm,
     ToRGB,
     ConstantInput,
 )
@@ -70,7 +72,7 @@ class Generator(nn.Module):
 
         for m in self.modules():
             if isinstance(m, (nn.Conv1d, nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_uniform_(m.weight)
+                nn.init.kaiming_normal_(m.weight)
             elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -122,7 +124,35 @@ class Generator(nn.Module):
         return x
 
 
- 
+class Discriminator(nn.Module):
+    def __init__(self, latent_dim=2048, cond_dim=2048):
+        super().__init__()
+        h_dim = 512
+        self.input_conv = nn.Sequential(
+            LatentResBlock(latent_dim, h_dim),
+            nn.BatchNorm1d(h_dim),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+        self.out_conv = nn.Sequential(
+            LatentResBlock(h_dim, h_dim // 4),
+            nn.BatchNorm1d(h_dim // 4),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+        self.fc = nn.Linear(h_dim // 4, 1)
+        for m in self.modules():
+            if isinstance(m, (nn.Conv1d, nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor):
+        x = self.input_conv.forward(x)
+        x = self.out_conv(x)
+        x = self.fc(x)
+        return x
+
+
 class TextureGenerator(nn.Module):
     def __init__(
         self,

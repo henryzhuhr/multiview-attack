@@ -4,9 +4,10 @@ coco:
   train_annotation_file: instances_train2017.json
   val_annotation_file: instances_val2017.json
   categories:
-    - motorcycle
+    # - dog
+    # - airplane
     # - tv
-    # - bowl
+    - bowl
     # - truck
     # - laptop
 carla:
