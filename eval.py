@@ -4,24 +4,19 @@ import logging
 import math
 from pathlib import Path
 import random
+
 import os
 import sys
+import tqdm
+import yaml
+from typing import Dict, List
 import cv2
 import datetime
 
 import numpy as np
 import neural_renderer as nr
 import torch
-from torch import Tensor, nn, autograd, optim
 from torch.nn import functional as F
-from torch.utils import data
-from torch.nn.utils import clip_grad_norm_
-import torch.distributed as dist
-from torch.cuda.amp import autocast, GradScaler
-from torchvision import transforms, utils
-
-from tqdm import tqdm
-import yaml
 
 from models.gan import TextureGenerator
 import tsgan
@@ -87,6 +82,10 @@ def get_args():
 
 def main():
     args: ArgsType = get_args()
+    save_dir = "tmp/eval"
+    os.makedirs(save_dir, exist_ok=True)
+
+    device = "cuda"
     data_set = tsgan.data.CarlaDataset(carla_root="tmp/data", categories=["dog", "car"])
 
     # --- Load Neural Renderer ---
@@ -97,7 +96,7 @@ def main():
         selected_faces=selected_faces,
         texture_size=args.texture_size,
         image_size=800,
-        device="cuda",
+        device=device,
     )
     # --- Load Texture Generator ---
     model = TextureGenerator(
@@ -108,29 +107,59 @@ def main():
         mix_prob=args.mix_prob
     )
     pretrained = torch.load(args.pretrained, map_location='cpu')
-    model.load_state_dict(pretrained["g"])
-    model.cuda().eval()
+    model.load_state_dict(pretrained["model"])
+    model.to(device).eval()
 
     # --- Load Detector ---
     with open("configs/hyp.scratch-low.yaml", "r") as f:
-        hyp: dict = yaml.safe_load(f)                                                        # load hyps dict
+        hyp: dict = yaml.safe_load(f)
     nc = 80
-    detector = Model("configs/yolov5s.yaml", ch=3, nc=nc, anchors=hyp.get('anchors')).cuda() # create
-    detector.nc = nc                                                                         # attach number of classes to model
-    detector.hyp = hyp                                                                       # attach hyperparameters to model
+    detector = Model("configs/yolov5s.yaml", ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)
+    detector.nc = nc
+    detector.hyp = hyp
     detector_loss = ComputeLoss(detector)
     ckpt = torch.load("pretrained/yolov5s.pt", map_location='cpu')
-    csd = ckpt['model'].float().state_dict()                                                 # checkpoint state_dict as FP32
-    detector.load_state_dict(csd, strict=False)                                              # load
+    csd = ckpt['model'].float().state_dict()
+    detector.load_state_dict(csd, strict=False)
     detector.eval()
+    conf_thres, iou_thres = 0.25, 0.6
 
-    x_t = neural_renderer.textures[:, neural_renderer.selected_faces, :]
-    print(x_t.shape)
+    n_r = 0.                                                             # noise ratio
+    x_t = neural_renderer.textures[:, neural_renderer.selected_faces, :] # x_{texture}
+    x_n = (1 - n_r) * x_t + n_r * torch.rand_like(x_t)                   # x_{texture with noise}
 
-    for item in data_set:
-        image = item["image"]
-        label = item["label"]
-        # (vt,ct,fov)=item
+    pbar = tqdm.tqdm(data_set)
+    for i_d, item in enumerate(pbar):
+        image = item["image"].to(device)
+        label = item["label"].to(device)
+        r_p = {"ct": item["ct"], "vt": item["vt"], "fov": item["fov"]}
+
+        x_adv = model.decode(model.forward(x_n, label)) # x_{adv}
+
+        render_image, _, _, render_img = render_a_image(neural_renderer, x_adv, image, r_p)
+        with torch.no_grad():
+            eval_pred, train_preds = detector.forward(render_image) # real
+
+            pred_results = non_max_suppression(eval_pred, conf_thres, iou_thres, None, False)[0]
+            if len(pred_results):
+                for *xyxy, conf, cls in pred_results:
+                    label = '%s %.2f' % (data_set.coco_ic_map[int(cls)], conf)
+                    x1, y1, x2, y2 = [int(xy) for xy in xyxy]
+                    cv2.rectangle(render_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(render_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.imwrite(os.path.join(save_dir, f"eval-{i_d}.png"), render_img)
+
+
+def render_a_image(
+    neural_renderer: NeuralRenderer, x_texture: torch.Tensor, base_image: torch.Tensor, render_params: dict
+):
+    tt_adv = neural_renderer.textures
+    tt_adv[:, neural_renderer.selected_faces, :] = x_texture
+    neural_renderer.set_render_perspective(render_params["ct"], render_params["vt"], render_params["fov"])
+    rgb_image, _, alpha_image = neural_renderer.forward(F.tanh(tt_adv))
+    render_image = alpha_image * rgb_image + (1 - alpha_image) * base_image
+    render_img = np.ascontiguousarray(render_image.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0) * 255)
+    return render_image, rgb_image, alpha_image, render_img.astype(np.uint8)
 
 
 if __name__ == "__main__":

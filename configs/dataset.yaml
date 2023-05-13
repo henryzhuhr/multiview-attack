@@ -7,8 +7,8 @@ coco:
     - dog
     # - airplane
     # - tv
-    - bowl
+    # - bowl
     # - truck
-    - laptop
+    # - laptop
 carla:
   root: tmp/data

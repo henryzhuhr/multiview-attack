@@ -52,7 +52,7 @@ class NeuralRenderer(nn.Module):
             viewing_angle=45,                     # 观察角度
         ).to(device)
 
-    def forward(self, textures=None):
+    def forward(self, textures=None)->List[torch.Tensor]:
         ''' Renders masks.
         Args:
             vertices: B X N X 3 numpy array2

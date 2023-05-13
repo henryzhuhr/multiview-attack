@@ -80,14 +80,14 @@ class Generator(nn.Module):
         latent_x: torch.Tensor, # [B, 1024]
         y: torch.Tensor,        # [B, num_classes] onehot
     ):
-        cond_latent = self.embedding_layer(F.one_hot(y, num_classes=self.cond_dim).float())
+        latent_y = self.embedding_layer(F.one_hot(y, num_classes=self.cond_dim).float())
 
         # TODO: 输入的两个latent 进行融合
-        # inject_index = self.inject_index
-        # latent = latent_x.unsqueeze(1).repeat(1, inject_index, 1)
-        # latent2 = cond_latent.unsqueeze(1).repeat(1, self.n_latent - inject_index, 1)
-        # latent = torch.cat([latent, latent2], 1) # [B, 18, 512]
-        latent = cond_latent.unsqueeze(1).repeat(1, self.n_latent, 1)
+        inject_index = self.inject_index
+        latent = latent_x.unsqueeze(1).repeat(1, inject_index, 1)
+        latent2 = latent_y.unsqueeze(1).repeat(1, self.n_latent - inject_index, 1)
+        latent = torch.cat([latent, latent2], 1) # [B, 18, 512]
+        # latent = cond_latent.unsqueeze(1).repeat(1, self.n_latent, 1)
 
         # TODO: 这里应该指的是style mixing，在第i层前用A图的latent code控制生图的低分辨率特征；
         # 在第i层后用B图的latent code控制高分辨率图特征，从而混合了A、B两张图

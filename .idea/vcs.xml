@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/projects/StyleCLIP" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/projects/clip" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/projects/multi-conditional-stylegan" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/projects/stylegan2-pytorch" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/projects/stylegan2-simple" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/projects/yolov5" vcs="Git" />
+  </component>
+</project>

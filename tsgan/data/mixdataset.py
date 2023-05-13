@@ -155,8 +155,8 @@ class CarlaDataset(data.Dataset):
         self.carla_dir = carla_dir
         self.carla_label_list = carla_label_list
         self.categories_list = categories_list
-        self.coco_ic_map = coco_category_index # {"class_name":index}
-        self.coco_ci_map = coco_index_category # {"index":class_name}
+        self.coco_ic_map = coco_index_category # {"class_name":index}
+        self.coco_ci_map = coco_category_index # {"index":class_name}
 
     def __len__(self):
         return self.carla_label_list.__len__()
@@ -166,10 +166,28 @@ class CarlaDataset(data.Dataset):
         # item = random.choice(self.carla_label_list)
         item = self.carla_label_list[index]
         image_file = os.path.join(self.carla_dir.images_dir, f"{item['name']}.png")
-        image = cv2.imread(image_file)
-        item["image"] = image
-        item["label"] = random.choice(self.categories_list)
-        return item
+        image = torch.from_numpy(cv2.imread(image_file)).permute(2, 0, 1).unsqueeze(0).float() / 255.
+        label = torch.tensor(random.choice(self.categories_list)).unsqueeze(0)
+        return {
+            "image": image,
+            "label": label,
+            "name": item["name"],
+            "vt": item["vehicle_transform"],
+            "ct": item["camera_transform"],
+            "fov": item["fov"],
+        }
+
+    @staticmethod
+    def collate_fn(batch):
+
+        data_list = {"image": [], "label": [], "name": [], "vt": [], "ct": [], "fov": []}
+        for item in batch:
+            for key in data_list.keys():
+                data_list[key].append(item[key])
+        data_list["image"] = torch.cat(data_list["image"])
+        data_list["label"] = torch.cat(data_list["label"])
+
+        return data_list
 
 
 class CroppedCOCOCarlaMixDataset(CroppedCOCO):

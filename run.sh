@@ -19,8 +19,25 @@ export CUDA_VISIBLE_DEVICES=0
 #     --latent_dim 1024 
 
 python train-tgan.py  \
-    --save_dir generator-all \
+    --save_dir attack-dog \
+    --obj_model data/models/vehicle-YZ.obj \
+    --selected_faces data/models/faces-std.txt \
+    --pretrained tmp/au toencoder/autoencoder.pt \
+    --categories "dog" \
+    --batch 8 --epochs 100 --lr 0.1 --milestones 20 50
+
+python train-tgan.py  \
+    --save_dir attack-bowl \
     --obj_model data/models/vehicle-YZ.obj \
     --selected_faces data/models/faces-std.txt \
     --pretrained tmp/autoencoder/autoencoder.pt \
-    --batch 8 --epochs 2000 --lr 0.1
+    --categories "bowl" \
+    --batch 8 --epochs 100 --lr 0.1 --milestones 20 50
+
+python train-tgan.py  \
+    --save_dir attack-dog_bowl \
+    --obj_model data/models/vehicle-YZ.obj \
+    --selected_faces data/models/faces-std.txt \
+    --pretrained tmp/autoencoder/autoencoder.pt \
+    --categories "dog" "bowl" \
+    --batch 8 --epochs 200 --lr 0.1 --milestones 50 100
