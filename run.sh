@@ -19,7 +19,7 @@ export CUDA_VISIBLE_DEVICES=0
 #     --latent_dim 1024 
 
 python train-tgan.py  \
-    --save_dir generator \
+    --save_dir generator-all \
     --obj_model data/models/vehicle-YZ.obj \
     --selected_faces data/models/faces-std.txt \
     --pretrained tmp/autoencoder/autoencoder.pt \

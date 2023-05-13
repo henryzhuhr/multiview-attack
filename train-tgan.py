@@ -93,7 +93,7 @@ def prepare_training(args: ArgsType):
         'configs/dataset.yaml',
         is_train=False,                                    # TODO: 测试完后, False 修改为训练 True
         show_detail=True,
-        # load_all_class=True,
+        load_all_class=True,
         transform=transforms.Compose([
                 transforms.RandomHorizontalFlip(),
                 transforms.Resize([224, 224]),
@@ -155,7 +155,7 @@ def prepare_training(args: ArgsType):
     optimized_params = [{"params": model.generator.parameters()}, {"params": model.decoder.parameters()}]
     # optimizer = optim.Adam(optimized_params, lr=args.lr,weight_decay=1e-4)
     optimizer = optim.SGD(optimized_params, lr=args.lr, momentum=0.9, weight_decay=1e-4)
-    lr_heduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 30], gamma=0.1)
+    lr_heduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60], gamma=0.1)
 
     return (neural_renderer, model, detector, detector_loss, optimizer, lr_heduler, train_loader, train_set)
 
@@ -465,8 +465,8 @@ def train():
 
         torch.save(
             {
-                "g": model.state_dict(),
-                "g_optim": optimizer.state_dict(),
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
                 "args": args
             }, f"{checkpoint_save_dir}/gan-{epoch}.pt"
         )

@@ -143,17 +143,20 @@ class CarlaDataset(data.Dataset):
                 if os.path.exists(corresponding_image_file):
                     carla_label_list.append(label)
 
-        self.carla_dir = carla_dir
-        self.carla_label_list = carla_label_list
-
         coco_category_index = {cn: idx for idx, cn in enumerate(COCO_CATEGORIES_MAP.values())}
+        coco_index_category = {idx: cn for idx, cn in enumerate(COCO_CATEGORIES_MAP.values())}
         if isinstance(categories, str):
             categories_list = [coco_category_index[categories]]
         elif isinstance(categories, list):
             categories_list = [coco_category_index[c] for c in categories]
         else:
             raise TypeError
+
+        self.carla_dir = carla_dir
+        self.carla_label_list = carla_label_list
         self.categories_list = categories_list
+        self.coco_ic_map = coco_category_index # {"class_name":index}
+        self.coco_ci_map = coco_index_category # {"index":class_name}
 
     def __len__(self):
         return self.carla_label_list.__len__()
