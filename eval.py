@@ -1,45 +1,43 @@
-import argparse
-from copy import deepcopy
-import logging
-import math
-from pathlib import Path
-import random
-
 import os
-import sys
+import argparse
+import datetime
 import tqdm
 import yaml
-from typing import Dict, List
-import cv2
-import datetime
 
 import numpy as np
-import neural_renderer as nr
+import cv2
 import torch
-from torch.nn import functional as F
 
 from models.gan import TextureGenerator
-import tsgan
-from tsgan.render import NeuralRenderer
-
-from tsgan.models.op import conv2d_gradfix
-from tsgan.models.classifer import resnet50
-
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[0]                         # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))                 # add ROOT to PATH
-ROOT = Path(os.path.relpath(ROOT, Path.cwd())) # relative
-
+from models.render import NeuralRenderer
+from models.data.carladataset import CarlaDataset
 from models.yolo import Model
 from utils.loss import ComputeLoss
-from utils.general import non_max_suppression, scale_boxes
+from utils.general import non_max_suppression
 
 cstr = lambda s: f"\033[01;32m{s}\033[0m"
 logt = lambda: "\033[01;32m{%d}\033[0m" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-torch.backends.cudnn.enabled = True
-torch.backends.cudnn.benchmark = True
+
+def get_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--save_dir', type=str, default='stylegan2')
+    parser.add_argument("--epochs", type=int, default=20000)
+    parser.add_argument("--batch", type=int, default=8)
+    parser.add_argument("--num_workers", type=int, default=8)
+
+    parser.add_argument("--mix_prob", type=float, default=0.9, help="probability of latent code mixing")
+    parser.add_argument("--lr", type=float, default=0.002)
+
+    parser.add_argument('--obj_model', type=str, default="assets/vehicle-YZ.obj")
+    parser.add_argument('--selected_faces', type=str, default="assets/faces-std.txt")
+    parser.add_argument('--texture_size', type=int, default=4)
+    parser.add_argument('--latent_dim', type=int, default=1024)
+    # parser.add_argument('--pretrained', type=str, default=None)
+    parser.add_argument('--pretrained', type=str, default="tmp/attack-dog-05131427/checkpoint/gan-98.pt")
+
+    return parser.parse_args()
 
 
 class ArgsType:
@@ -59,34 +57,13 @@ class ArgsType:
     pretrained: str
 
 
-def get_args():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--save_dir', type=str, default='stylegan2')
-    parser.add_argument("--epochs", type=int, default=20000)
-    parser.add_argument("--batch", type=int, default=8)
-    parser.add_argument("--num_workers", type=int, default=8)
-
-    parser.add_argument("--mix_prob", type=float, default=0.9, help="probability of latent code mixing")
-    parser.add_argument("--lr", type=float, default=0.002)
-
-    parser.add_argument('--obj_model', type=str, default="data/models/vehicle-YZ.obj")
-    parser.add_argument('--selected_faces', type=str, default="data/models/faces-std.txt")
-    parser.add_argument('--texture_size', type=int, default=4)
-    parser.add_argument('--latent_dim', type=int, default=1024)
-    # parser.add_argument('--pretrained', type=str, default=None)
-    parser.add_argument('--pretrained', type=str, default="tmp/generator-bowl/checkpoint/gan-268.pt")
-
-    return parser.parse_args()
-
-
 def main():
     args: ArgsType = get_args()
     save_dir = "tmp/eval"
     os.makedirs(save_dir, exist_ok=True)
 
     device = "cuda"
-    data_set = tsgan.data.CarlaDataset(carla_root="tmp/data", categories=["dog", "car"])
+    data_set = CarlaDataset(carla_root="tmp/data", categories=["dog", "car"])
 
     # --- Load Neural Renderer ---
     with open(args.selected_faces, 'r') as f:
@@ -124,8 +101,8 @@ def main():
     detector.eval()
     conf_thres, iou_thres = 0.25, 0.6
 
-    n_r = 0.                                                             # noise ratio
     x_t = neural_renderer.textures[:, neural_renderer.selected_faces, :] # x_{texture}
+    n_r = 0.                                                             # noise ratio
     x_n = (1 - n_r) * x_t + n_r * torch.rand_like(x_t)                   # x_{texture with noise}
 
     pbar = tqdm.tqdm(data_set)
@@ -134,10 +111,10 @@ def main():
         label = item["label"].to(device)
         r_p = {"ct": item["ct"], "vt": item["vt"], "fov": item["fov"]}
 
-        x_adv = model.decode(model.forward(x_n, label)) # x_{adv}
-
-        render_image, _, _, render_img = render_a_image(neural_renderer, x_adv, image, r_p)
         with torch.no_grad():
+            x_adv = model.decode(model.forward(x_t, label)) # x_{adv}
+            render_image, _, _, render_img = render_a_image(neural_renderer, x_adv, image, r_p)
+
             eval_pred, train_preds = detector.forward(render_image) # real
 
             pred_results = non_max_suppression(eval_pred, conf_thres, iou_thres, None, False)[0]
@@ -156,7 +133,7 @@ def render_a_image(
     tt_adv = neural_renderer.textures
     tt_adv[:, neural_renderer.selected_faces, :] = x_texture
     neural_renderer.set_render_perspective(render_params["ct"], render_params["vt"], render_params["fov"])
-    rgb_image, _, alpha_image = neural_renderer.forward(F.tanh(tt_adv))
+    rgb_image, _, alpha_image = neural_renderer.forward(torch.tanh(tt_adv))
     render_image = alpha_image * rgb_image + (1 - alpha_image) * base_image
     render_img = np.ascontiguousarray(render_image.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0) * 255)
     return render_image, rgb_image, alpha_image, render_img.astype(np.uint8)
