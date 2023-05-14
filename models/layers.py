@@ -9,7 +9,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.autograd import Function
 
-from tsgan.utils import logheader
+# from tsgan.utils import logheader
 # print(logheader(),"input",input.shape) # TODO
 
 

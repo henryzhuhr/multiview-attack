@@ -5,7 +5,7 @@ from torch import  nn
 
 import neural_renderer
 
-from ..types.carla import (Location, Rotation, Transform)
+# from ..types.carla import (Location, Rotation, Transform)
 
 
 class NeuralRenderer(nn.Module):
@@ -68,8 +68,10 @@ class NeuralRenderer(nn.Module):
 
     def set_render_perspective(
         self,
-        camera_transform: Transform,  #
-        vehicle_transform: Transform,
+        camera_transform,  
+        vehicle_transform,
+        # camera_transform: Transform,  #
+        # vehicle_transform: Transform,
         fov: int
     ):
         """
