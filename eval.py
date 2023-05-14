@@ -1,6 +1,7 @@
 import os
 import argparse
 import datetime
+from typing import List
 import tqdm
 import yaml
 
@@ -34,13 +35,18 @@ def get_args():
     parser.add_argument('--selected_faces', type=str, default="assets/faces-std.txt")
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=1024)
-    # parser.add_argument('--pretrained', type=str, default=None)
+
+    parser.add_argument('--categories', type=str, nargs='+', default=["dog"])
     parser.add_argument('--pretrained', type=str, default="tmp/attack-dog-05131427/checkpoint/gan-98.pt")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    return args
 
 
 class ArgsType:
+    device: str
     save_dir: str
     epochs: int
     batch: int
@@ -49,11 +55,14 @@ class ArgsType:
 
     mix_prob: float
     lr: float
+    milestones: List[int]
 
     obj_model: str
     selected_faces: str
     texture_size: int
     latent_dim: int
+
+    categories: List[str]
     pretrained: str
 
 
@@ -62,8 +71,9 @@ def main():
     save_dir = "tmp/eval"
     os.makedirs(save_dir, exist_ok=True)
 
-    device = "cuda"
+    device = args.device
     data_set = CarlaDataset(carla_root="tmp/data", categories=["dog", "car"])
+    num_classes = len(data_set.coco_ic_map)
 
     # --- Load Neural Renderer ---
     with open(args.selected_faces, 'r') as f:
@@ -73,14 +83,14 @@ def main():
         selected_faces=selected_faces,
         texture_size=args.texture_size,
         image_size=800,
-        device=device,
+        device=args.device,
     )
     # --- Load Texture Generator ---
     model = TextureGenerator(
         nt=len(selected_faces),
         ts=args.texture_size,
         style_dim=args.latent_dim,
-        cond_dim=len(data_set.coco_ic_map),
+        cond_dim=num_classes,
         mix_prob=args.mix_prob
     )
     pretrained = torch.load(args.pretrained, map_location='cpu')
@@ -90,9 +100,8 @@ def main():
     # --- Load Detector ---
     with open("configs/hyp.scratch-low.yaml", "r") as f:
         hyp: dict = yaml.safe_load(f)
-    nc = 80
-    detector = Model("configs/yolov5s.yaml", ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)
-    detector.nc = nc
+    detector = Model("configs/yolov5s.yaml", ch=3, nc=num_classes, anchors=hyp.get('anchors')).to(device)
+    detector.nc = num_classes
     detector.hyp = hyp
     detector_loss = ComputeLoss(detector)
     ckpt = torch.load("pretrained/yolov5s.pt", map_location='cpu')

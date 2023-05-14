@@ -14,31 +14,30 @@ export CUDA_VISIBLE_DEVICES=0
 
 # rm -rf tmp/autoencoder
 # python train-AE.py \
-#     --obj_model data/models/vehicle-YZ.obj \
-#     --selected_faces data/models/faces-std.txt \
+#     --obj_model assets/vehicle-YZ.obj \
+#     --selected_faces assets/faces-std.txt \
 #     --latent_dim 1024 
 
-# python train-tgan.py  \
-#     --save_dir attack-dog \
-#     --obj_model data/models/vehicle-YZ.obj \
-#     --selected_faces data/models/faces-std.txt \
-#     --pretrained tmp/autoencoder/autoencoder.pt \
-#     --categories "dog" \
-#     --batch 8 --epochs 100 --lr 0.1 --milestones 20 50
-
-
 python train-tgan.py  \
-    --save_dir attack-bowl \
-    --obj_model data/models/vehicle-YZ.obj \
-    --selected_faces data/models/faces-std.txt \
+    --save_dir attack-dog \
+    --obj_model assets/vehicle-YZ.obj \
+    --selected_faces assets/faces-std.txt \
     --pretrained tmp/autoencoder/autoencoder.pt \
-    --categories "bowl" \
-    --batch 8 --epochs 100 --lr 0.1 --milestones 20 50
+    --categories "dog" \
+    --batch 8 --epochs 200 --lr 0.1 --milestones 50 100
+
+# python train-tgan.py  \
+#     --save_dir attack-bowl \
+#     --obj_model assets/vehicle-YZ.obj \
+#     --selected_faces assets/faces-std.txt \
+#     --pretrained tmp/autoencoder/autoencoder.pt \
+#     --categories "bowl" \
+#     --batch 8 --epochs 200 --lr 0.1 --milestones 50 100
 
 python train-tgan.py  \
     --save_dir attack-dog_bowl \
-    --obj_model data/models/vehicle-YZ.obj \
-    --selected_faces data/models/faces-std.txt \
+    --obj_model assets/vehicle-YZ.obj \
+    --selected_faces assets/faces-std.txt \
     --pretrained tmp/autoencoder/autoencoder.pt \
     --categories "dog" "bowl" \
-    --batch 8 --epochs 300 --lr 0.1 --milestones 50 150
+    --batch 8 --epochs 500 --lr 0.1 --milestones 100 300
