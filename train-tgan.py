@@ -245,18 +245,17 @@ def train():
                 ldet_epoch += ldet.item() * bs
 
                 if i_mb % 4 == 0:
-                    loss_smooth = 0.05 * F.l1_loss(xs_t, xs_adv)
-                    loss_smooth_epoch += loss_smooth.item() * bs / 16
+                    loss_smooth = 0.05 * F.mse_loss(xs_t, xs_adv)
+                    loss_smooth_epoch += loss_smooth.item() * bs / 4
                 else:
                     loss_smooth = loss_zero
 
                 loss_adv = lbox + lobj + lcls # + loss_smooth
 
-                ladv_epoch += (lbox + lobj + lcls).item() * bs + loss_smooth * bs * 16
+                ladv_epoch += (lbox + lobj + lcls).item() * bs + loss_smooth * bs * 4
 
                 optimizer.zero_grad()
                 loss_adv.backward()
-                # clip_grad_norm_(parameters=g_model.parameters(), max_norm=10, norm_type=2)
                 optimizer.step()
 
                 # accumulate(g_ema, generator, accum)
@@ -325,7 +324,7 @@ def train():
         epoch_loss_dict = {
             "LAdv": ladv_epoch / data_num,
             "LDet": ldet_epoch / data_num,
-            "Ls": loss_smooth_epoch / data_num / 16,
+            "Ls": loss_smooth_epoch / data_num / 4,
             "lcls": lcls_epoch / data_num,
             "lbox": lbox_epoch / data_num,
             "lobj": lobj_epoch / data_num,
