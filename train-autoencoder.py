@@ -12,9 +12,9 @@ import torch
 from torch import Tensor, optim, nn
 from torch.nn import functional as F
 
-import tsgan
-from tsgan.render import NeuralRenderer
-from tsgan import types
+
+from models.data.carladataset import CarlaDataset
+from models.render import NeuralRenderer
 from models.gan import TextureGenerator
 
 
@@ -67,8 +67,8 @@ def main():
     image = cv2.imread(args.scence_image)
     with open(args.scence_label, 'r') as f:
         label_dict = json.load(f)
-        vehicle_transform = convert_dict_transform(label_dict['vehicle'])
-        camera_transform = convert_dict_transform(label_dict['camera'])
+        vehicle_transform = CarlaDataset.convert_dict_transform(label_dict['vehicle'])
+        camera_transform = CarlaDataset.convert_dict_transform(label_dict['camera'])
         fov = label_dict['camera']['fov']
         name = label_dict['name']
 
@@ -170,17 +170,7 @@ def render_a_image(neural_renderer: NeuralRenderer, image: cv2.Mat, x_t: Tensor)
     return render_image
 
 
-def convert_dict_transform(transform_dict: Dict):
-    return types.carla.Transform(
-        location=types.carla.Location(
-            x=transform_dict['location']['x'], y=transform_dict['location']['y'], z=transform_dict['location']['z']
-        ),
-        rotation=types.carla.Rotation(
-            pitch=transform_dict['rotation']['pitch'],
-            yaw=transform_dict['rotation']['yaw'],
-            roll=transform_dict['rotation']['roll']
-        )
-    )
+
 
 
 if __name__ == '__main__':

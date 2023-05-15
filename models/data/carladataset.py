@@ -114,21 +114,7 @@ class CarlaDatasetDir:
         self.segmentations_dir = os.path.join(base_root, "segmentations")
 
 
-def load_carla_label(label_path):
-    def convert_dict_transform(td: Dict):
-        # td: transform_dict
-        return types.carla.Transform(
-            location=types.carla.Location(x=td['location']['x'], y=td['location']['y'], z=td['location']['z']),
-            rotation=types.carla.Rotation(pitch=td['rotation']['pitch'], yaw=td['rotation']['yaw'], roll=td['rotation']['roll']
-        ))  # yapf:disable
 
-    with open(label_path, "r") as f:
-        label_dict = json.load(f)
-    vehicle_transform = convert_dict_transform(label_dict["vehicle"])
-    camera_transform = convert_dict_transform(label_dict["camera"])
-    fov = label_dict["camera"]["fov"]
-    name = label_dict["name"]
-    return {"name": name, "vehicle_transform": vehicle_transform, "camera_transform": camera_transform, "fov": fov}
 
 
 class CarlaDataset(data.Dataset):
@@ -138,7 +124,7 @@ class CarlaDataset(data.Dataset):
         carla_dir = CarlaDatasetDir(carla_root)
         for i_f, file in enumerate(os.listdir(carla_dir.labels_dir)):
             if file.endswith(".json"):
-                label = load_carla_label(os.path.join(carla_dir.labels_dir, file))
+                label = CarlaDataset.load_carla_label(os.path.join(carla_dir.labels_dir, file))
                 corresponding_image_file = os.path.join(carla_dir.images_dir, f"{label['name']}.png")
                 if os.path.exists(corresponding_image_file):
                     carla_label_list.append(label)
@@ -188,7 +174,22 @@ class CarlaDataset(data.Dataset):
         data_list["label"] = torch.cat(data_list["label"])
 
         return data_list
-
+    @staticmethod
+    def convert_dict_transform(td: Dict):
+        # td: transform_dict
+        return types.carla.Transform(
+            location=types.carla.Location(x=td['location']['x'], y=td['location']['y'], z=td['location']['z']),
+            rotation=types.carla.Rotation(pitch=td['rotation']['pitch'], yaw=td['rotation']['yaw'], roll=td['rotation']['roll']
+        ))  # yapf:disable
+    @staticmethod
+    def load_carla_label(label_path):
+        with open(label_path, "r") as f:
+            label_dict = json.load(f)
+        vehicle_transform = CarlaDataset.convert_dict_transform(label_dict["vehicle"])
+        camera_transform = CarlaDataset.convert_dict_transform(label_dict["camera"])
+        fov = label_dict["camera"]["fov"]
+        name = label_dict["name"]
+        return {"name": name, "vehicle_transform": vehicle_transform, "camera_transform": camera_transform, "fov": fov}
 
 class CroppedCOCOCarlaMixDataset(CroppedCOCO):
     def __init__(
@@ -229,7 +230,7 @@ class CroppedCOCOCarlaMixDataset(CroppedCOCO):
         for i_f, file in enumerate(os.listdir(carla_dir.labels_dir)):
             if file.endswith(".json"):
                 label_path = os.path.join(carla_dir.labels_dir, file)
-                label = load_carla_label(label_path)
+                label = CarlaDataset.load_carla_label(label_path)
                 corresponding_image_file = os.path.join(carla_dir.images_dir, f"{label['name']}.png")
                 if os.path.exists(corresponding_image_file):
                     carla_label_list.append(label)
