@@ -2,6 +2,7 @@
 渲染车辆到全部数据集，筛选出渲染歪的
 """
 import abc
+from time import sleep
 from typing import Dict, List
 import os, sys
 import json
@@ -11,9 +12,8 @@ import numpy as np
 
 import torch
 import tqdm
-import tsgan
-from tsgan.render import NeuralRenderer
-from tsgan import types
+from models.render import NeuralRenderer
+from models.data import types
 import neural_renderer as nr
 
 
@@ -26,7 +26,7 @@ class TypeArgs(metaclass=abc.ABCMeta):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--obj_model', type=str, default='data/models/vehicle-YZ.obj')
+    parser.add_argument('--obj_model', type=str, default='assets/vehicle-YZ.obj')
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--data_dir', type=str, default="tmp/data")
     parser.add_argument('--device', type=str, default='cuda')
@@ -46,6 +46,17 @@ def convert_dict_transform(transform_dict: Dict):
     )
 
 
+def get_transform(transform_dict: types.carla.Transform):
+    return "L[%.2f %.2f %.2f]/R[%.2f %.2f %.2f]" % (
+        transform_dict.location.x,
+        transform_dict.location.y,
+        transform_dict.location.z,
+        transform_dict.rotation.pitch,
+        transform_dict.rotation.yaw,
+        transform_dict.rotation.roll,
+    )
+
+
 def main():
     args: TypeArgs = get_args()
 
@@ -56,9 +67,9 @@ def main():
     # Load Image and label
     label_dir = os.path.join(args.data_dir, "labels")
     image_dir = os.path.join(args.data_dir, "images")
-    render_dir=os.path.join(args.data_dir, "render")
+    render_dir = os.path.join(args.data_dir, "render")
     os.makedirs(render_dir, exist_ok=True)
-    pbar=tqdm.tqdm(os.listdir(label_dir))
+    pbar = tqdm.tqdm(os.listdir(label_dir))
     for file in pbar:
         try:
             with open(os.path.join(label_dir, file), 'r') as f:
@@ -73,15 +84,15 @@ def main():
         name = label_dict['name']
 
         # Load Image
-        image_file=os.path.join(image_dir, f"{name}.png")
+        image_file = os.path.join(image_dir, f"{name}.png")
         if not os.path.exists(image_file):
             print(f"not found image {image_file}")
             continue
 
-        render_file=os.path.join(render_dir, f"{name}.png")
-        if os.path.exists(render_file):
-            print(f"rendered {image_file}")
-            continue
+        render_file = os.path.join(render_dir, f"{name}.png")
+        # if os.path.exists(render_file):
+        #     print(f"rendered {image_file}")
+        #     continue
         image = cv2.imread(image_file)
 
         # render
@@ -108,6 +119,13 @@ def main():
                 alpha = alpha_channel[x][y]
                 render_image[x][y] = alpha * rgb_img[x][y] + (1 - alpha) * image[x][y]
         cv2.imwrite(render_file, render_image)
+
+        print(
+            get_transform(vehicle_transform),
+            get_transform(camera_transform),
+        )
+        cv2.imwrite("tmp/render.png", render_image)
+        sleep(1)
 
 
 if __name__ == '__main__':

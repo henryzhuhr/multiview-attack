@@ -12,32 +12,27 @@ export OMP_NUM_THREADS=8
 
 export CUDA_VISIBLE_DEVICES=0
 
-# rm -rf tmp/autoencoder
-# python train-AE.py \
-#     --obj_model assets/vehicle-YZ.obj \
-#     --selected_faces assets/faces-std.txt \
-#     --latent_dim 1024 
-
 python train-tgan.py  \
-    --save_dir attack-dog \
+    --save_dir attack_l2 \
     --obj_model assets/vehicle-YZ.obj \
     --selected_faces assets/faces-std.txt \
-    --pretrained tmp/autoencoder/autoencoder.pt \
+    --pretrained tmp/autoencoder/ae-std.pt \
     --categories "dog" \
     --batch 8 --epochs 200 --lr 0.1 --milestones 50 100
 
-# python train-tgan.py  \
-#     --save_dir attack-bowl \
-#     --obj_model assets/vehicle-YZ.obj \
-#     --selected_faces assets/faces-std.txt \
-#     --pretrained tmp/autoencoder/autoencoder.pt \
-#     --categories "bowl" \
-#     --batch 8 --epochs 200 --lr 0.1 --milestones 50 100
-
 python train-tgan.py  \
-    --save_dir attack-dog_bowl \
+    --save_dir attack-bowl \
     --obj_model assets/vehicle-YZ.obj \
     --selected_faces assets/faces-std.txt \
-    --pretrained tmp/autoencoder/autoencoder.pt \
-    --categories "dog" "bowl" \
-    --batch 8 --epochs 500 --lr 0.1 --milestones 100 300
+    --pretrained tmp/autoencoder/ae-std.pt \
+    --categories "dog" "apple" \
+    --batch 8 --epochs 300 --lr 0.1 --milestones 100 150
+
+# python train-tgan.py  \
+#     --save_dir attack_l1 \
+#     --obj_model assets/vehicle-YZ.obj \
+#     --selected_faces assets/faces-less.txt \
+#     --pretrained tmp/autoencoder/ae-less.pt \
+#     --categories "dog" "bowl" "apple" "airplane" \
+#     --batch 8 --epochs 400 --lr 0.1 --milestones 200 300
+

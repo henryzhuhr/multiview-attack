@@ -1,29 +1,30 @@
 {
-    "name": "Town10HD-point_0082-distance_000-direction_2",
-    "image": "Town10HD-point_0082-distance_000-direction_2.png",
+    "name": "Town10HD-point_0014-distance_000-direction_0",
+    "image": "Town10HD-point_0014-distance_000-direction_0.png",
     "state": true,
+    "scene": true,
     "map": "Town10HD",
     "vehicle": {
         "location": {
-            "x": -6.554497718811035,
-            "y": 137.2259521484375,
+            "x": -56.86616134643555,
+            "y": 140.53555297851562,
             "z": 0.5999999642372131
         },
         "rotation": {
             "pitch": 0.0,
-            "yaw": 0.352119117975235,
+            "yaw": 0.35212698578834534,
             "roll": 0.0
         }
     },
     "camera": {
         "location": {
-            "x": 4.0,
-            "y": -2.5,
-            "z": 4.0
+            "x": 6.0,
+            "y": -4.0,
+            "z": 3.0
         },
         "rotation": {
-            "pitch": -40.297889709472656,
-            "yaw": 147.99461364746094,
+            "pitch": -22.588539123535156,
+            "yaw": 146.3099365234375,
             "roll": 0.0
         },
         "fov": 90

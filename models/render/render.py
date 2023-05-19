@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 import torch
-from torch import  nn
+from torch import nn
 
 import neural_renderer
 
@@ -37,7 +37,6 @@ class NeuralRenderer(nn.Module):
         self.textures_mask = textures_mask.int()
         # render_textures = textures * self.textures_mask
 
-        
         self.render_textures = nn.Parameter(textures.unsqueeze(0).clone()) # 待渲染的纹理 (优化参数)
 
         # 初始化渲染器
@@ -52,7 +51,7 @@ class NeuralRenderer(nn.Module):
             viewing_angle=45,                     # 观察角度
         ).to(device)
 
-    def forward(self, textures=None)->List[torch.Tensor]:
+    def forward(self, textures=None) -> List[torch.Tensor]:
         ''' Renders masks.
         Args:
             vertices: B X N X 3 numpy array2
@@ -68,10 +67,10 @@ class NeuralRenderer(nn.Module):
 
     def set_render_perspective(
         self,
-        camera_transform,  
+        camera_transform,
         vehicle_transform,
-        # camera_transform: Transform,  #
-        # vehicle_transform: Transform,
+                                # camera_transform: Transform,  #
+                                # vehicle_transform: Transform,
         fov: int
     ):
         """
@@ -87,7 +86,7 @@ class NeuralRenderer(nn.Module):
         >>>                     [  0.         -89.60925293   0.        ]]   # 旋转参数        
         """
 
-        view_scale = 0.54 * 1.3                                  # 超参数： 数值越小 模型越大
+        view_scale = 0.54 * 1.2                                 # 超参数： 数值越小 模型越大
         scale = (self.renderer.viewing_angle / fov) * view_scale # 视角缩放系数，FOV相关
 
         # 距离
@@ -144,7 +143,7 @@ class NeuralRenderer(nn.Module):
                 cosfi = p[0] / np.sqrt(p[0]**2 + p[1]**2)
                 sinfi = p[1] / np.sqrt(p[0]**2 + p[1]**2)
 
-            yaw_rad = 0#np.radians(vt.rotation.yaw)
+            yaw_rad = 0 # ATTENTION: np.radians(vt.rotation.yaw)
             cossum = cosfi * np.cos(yaw_rad) + sinfi * np.sin(yaw_rad)
             sinsum = np.cos(yaw_rad) * sinfi - np.sin(yaw_rad) * cosfi
             trans_p.append([np.sqrt(p[0]**2 + p[1]**2) * cossum, np.sqrt(p[0]**2 + p[1]**2) * sinsum, p[2]])

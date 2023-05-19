@@ -7,7 +7,6 @@ echo -e "\n\033[01;36m[ENV]$(which python) \033[0m\n"
 
 
 
-rm -rf tmp/autoencoder
 python train-autoencoder.py \
     --obj_model assets/vehicle-YZ.obj \
     --latent_dim 1024 \
@@ -25,3 +24,10 @@ python train-autoencoder.py \
     --latent_dim 1024 \
     --selected_faces assets/faces-full.txt \
     --save_name ae-full
+
+
+
+# export name=Town10HD-point_0014-distance_000-direction_0
+# cp tmp/data/scenes/$name.png images/carla-scene.png
+# cp tmp/data/labels/$name.json images/carla-scene.json
+python sample.py --selected_faces assets/faces-less.txt --epoches 1

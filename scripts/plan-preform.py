@@ -1,3 +1,4 @@
+import random
 from typing import List
 
 import os
@@ -8,15 +9,17 @@ import json
 
 import cv2
 import numpy as np
-
 import carla
 
 sys.path.append(os.getcwd())
-from tsgan import types
+from models.data import types
+
+tm_port = 8000
 
 
 class Args:
-    data_root = "tmp/data"
+    world_map = "Town03"
+    data_root = "tmp/data-Town03"
 
     class Dirs:
         image = 'images'
@@ -25,132 +28,184 @@ class Args:
 
         @staticmethod
         def update():
+            Args.Dirs.label = os.path.join(Args.data_root, Args.Dirs.label)
             Args.Dirs.image = os.path.join(Args.data_root, Args.Dirs.image)
             Args.Dirs.scene = os.path.join(Args.data_root, Args.Dirs.scene)
-            Args.Dirs.label = os.path.join(Args.data_root, Args.Dirs.label)
+            os.makedirs(Args.Dirs.image, exist_ok=True)
+            os.makedirs(Args.Dirs.scene, exist_ok=True)
 
 
-def retrieve_from_label(label_file: str):
-    def dict_to_carla_transform(transform_dict: dict) -> types.carla.Transform:
-        return carla.Transform(
-            location=carla.Location(
-                x=transform_dict['location']['x'],         #
-                y=transform_dict['location']['y'],
-                z=transform_dict['location']['z']
-            ),
-            rotation=carla.Rotation(
-                pitch=transform_dict['rotation']['pitch'], #
-                yaw=transform_dict['rotation']['yaw'],
-                roll=transform_dict['rotation']['roll']
-            ),
-        )
+Args.Dirs.update()
 
-    with open(label_file, 'r') as f:
-        label_dict = json.load(f)
-        if not check_dict_type(label_dict, types.label.valid_label_type_dict):
-            return False
-        if label_dict['state']:
-            return True
-    plan_name = label_dict['name']
-    world_map = label_dict['map']
 
-    start_time = time.time()
-    actor_list = []
-    try:
-        client = carla.Client('localhost', 2000)
-        client.set_timeout(10)
-        world = client.load_world(world_map)
+def get_labels(label_dir: str):
+    label_list = {}
+    for file in os.listdir(label_dir):
+        if file.endswith('.json'):
+            label_file = os.path.join(label_dir, file)
+            with open(label_file, 'r') as f:
+                label_dict = json.load(f)
+                label_list[label_file] = label_dict
+    return label_list
 
-        vehicle_transform = dict_to_carla_transform(label_dict['vehicle'])
-        camera_transform = dict_to_carla_transform(label_dict['camera'])
 
-        # Get blueprint_library
-        blueprint_library = world.get_blueprint_library()
-
-        # Get vehicle blueprint
-        vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
-        vehicle_actor: types.carla.Actor = world.spawn_actor(vehicle_bp, vehicle_transform)
-        if label_dict['scene']:
-            actor_list.append(vehicle_actor)
-
-        CameraManager.Settings.fov = label_dict['camera']['fov']
-        camera_manager = CameraManager(blueprint_library)
-
-        rgb_camera_actor: types.carla.Actor = world.spawn_actor(
-            camera_manager.get_camera_rgb_blueprint(),
-            camera_transform,
-            attach_to=vehicle_actor,
-            attachment_type=carla.AttachmentType.Rigid
-        )
-        if (not label_dict['scene']):
-            time.sleep(1)
-            camera_abs_transform = rgb_camera_actor.get_transform()
-            rgb_camera_actor: types.carla.Actor = world.spawn_actor(
-                camera_manager.get_camera_rgb_blueprint(), camera_abs_transform
-            )
-            vehicle_actor.destroy()
-            time.sleep(1)
-        actor_list.append(rgb_camera_actor)
-
-        save_file = label_dict['image']
-        image_save = os.path.join(Args.Dirs.image, save_file)
-        scene_save = os.path.join(Args.Dirs.scene, save_file)
-        save_file_path = image_save if label_dict['scene'] else scene_save
-
-        rgb_camera_actor.listen(
-            lambda image: CameraManager.save_img(
-                image,                                                                      #
-                [CameraManager.Settings.image_size_x, CameraManager.Settings.image_size_y],
-                save_file_path
-            )
-        )
-        time.sleep(1.2)
-
-        state = scene = False
-        print(f'{ColorConsole.greenl}[State]{ColorConsole.reset}', plan_name, end=': ')
-        if os.path.exists(os.path.join(Args.Dirs.scene, save_file)):
-            scene = True
-        if os.path.exists(os.path.join(Args.Dirs.image, save_file)):
-            state = True
-        print(' NOT save' if (scene or (scene and state)) else 'Finish', 'in %.2f s' % (time.time() - start_time))
-        rgb_camera_actor.stop()
-
-        with open(label_file, 'w') as f:
-            label_dict['state'] = state # 改变状态
-            label_dict['scene'] = scene # 改变状态
-            json.dump(label_dict, f, indent=4, ensure_ascii=False)
-    except RuntimeError as e:
-        print(ColorConsole.red, '[RuntimeError]', ColorConsole.reset, f'in Map:{world_map}', e)
-    finally:
-        if client:
-            client.apply_batch([carla.command.DestroyActor(x) for x in actor_list])
+def dict_to_carla_transform(transform_dict: dict) -> types.carla.Transform:
+    return carla.Transform(
+        location=carla.Location(
+            x=transform_dict['location']['x'],         #
+            y=transform_dict['location']['y'],
+            z=transform_dict['location']['z']
+        ),
+        rotation=carla.Rotation(
+            pitch=transform_dict['rotation']['pitch'], #
+            yaw=transform_dict['rotation']['yaw'],
+            roll=transform_dict['rotation']['roll']
+        ),
+    )
 
 
 def main():
-    if not os.path.exists(Args.Dirs.image):
-        os.makedirs(Args.Dirs.image, exist_ok=True)
-    if not os.path.exists(Args.Dirs.scene):
-        os.makedirs(Args.Dirs.scene, exist_ok=True)
+    label_dicts = get_labels(Args.Dirs.label)
 
-    for file in os.listdir(Args.Dirs.label):
-        if file.endswith('.json'):
-            retrieve_from_label(os.path.join(Args.Dirs.label, file))
-            # break
+    actor_list: List[types.carla.Actor] = []
+    vehicle_bps = []
+    walkers_list = []
+    camera_actor: types.carla.Actor = None
+    try:
+        client = carla.Client('localhost', 2000)
+        client.set_timeout(2.0)
+        world = client.load_world(Args.world_map)
+        # world = client.get_world()
+
+        traffic_manager = client.get_trafficmanager(tm_port)      # 获取交通管理器
+        traffic_manager.set_global_distance_to_leading_vehicle(2) # 与前车距离
+
+        # 获取蓝图
+        blueprint_library = world.get_blueprint_library()
+        vehicle_bps = blueprint_library.filter('vehicle')
+        filter_out = [
+                       # 'vehicle.tesla.model3',
+        ]
+        vehicle_bps = [x for x in vehicle_bps if (x.id not in filter_out)]
+        vehicle_bps = vehicle_bps + vehicle_bps
+        print(f" -- Get {len(vehicle_bps)} vehicles")
+
+        # 获取出生点
+        spawn_points = world.get_map().get_spawn_points()
+        # 生成车辆
+        for bp in vehicle_bps:
+            shuffled_list = spawn_points.copy()
+            random.shuffle(shuffled_list)
+            for transform in shuffled_list:
+                actor = world.try_spawn_actor(bp, transform)
+                if actor is not None:
+                    actor_list.append(actor)
+                    actor.set_autopilot(True)
+                    print('created %s' % actor.type_id)
+                    break
+
+        # 加载 Model3
+        vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
+
+        # 加载 Camera
+        camera_bp = blueprint_library.find('sensor.camera.rgb')
+        camera_bp.set_attribute('image_size_x', str(Settings.image_size[0]))
+        camera_bp.set_attribute('image_size_y', str(Settings.image_size[1]))
+        camera_bp.set_attribute('sensor_tick', str(Settings.sensor_tick))
+        camera_bp.set_attribute('shutter_speed', str(Settings.shutter_speed))
+
+        time.sleep(1)
+        for label_file, label_dict in label_dicts.items():
+
+            save_file = label_dict['name'] + ".png"
+            scene_image = os.path.join(Args.Dirs.scene, save_file)
+            state_image = os.path.join(Args.Dirs.image, save_file)
+            state = scene = False
+            if os.path.exists(scene_image):
+                scene = True
+            # if os.path.exists(state_image):
+            state = True
+            if state and scene:
+                continue
+            if not scene:
+                save_file_path = scene_image
+            else:
+                save_file_path = state_image
+
+            vehicle_transform = dict_to_carla_transform(label_dict['vehicle'])
+            camera_transform = dict_to_carla_transform(label_dict['camera'])
+
+            camera_bp.set_attribute('fov', str(label_dict['camera']["fov"]))
+
+            try:
+                vehicle_actor: types.carla.Actor = world.spawn_actor(vehicle_bp, vehicle_transform)
+            except:
+                continue
+            else:
+                time.sleep(1)
+                camera_actor: types.carla.Actor = world.spawn_actor(
+                    camera_bp,
+                    camera_transform,
+                    attach_to=vehicle_actor,
+                    attachment_type=carla.AttachmentType.Rigid,
+                )
+
+                if not scene:
+                    vehicle_actor.destroy()
+                    time.sleep(1)
+
+                camera_actor.listen(lambda image: save_img(image, Settings.image_size, save_file_path))
+
+                time.sleep(2)
+
+                if camera_actor:
+                    camera_actor.stop()
+                    carla.command.DestroyActor(camera_actor)
+                if vehicle_actor:
+                    carla.command.DestroyActor(vehicle_actor)
+
+                print(f'{Color.greenl}[State]{Color.reset}', label_dict['name'], end=': ')
+
+                state = scene = False
+                if os.path.exists(os.path.join(Args.Dirs.scene, save_file)):
+                    scene = True
+                # if os.path.exists(os.path.join(Args.Dirs.image, save_file)):
+                state = True
+
+                with open(label_file, 'w') as f:
+                    label_dict['state'] = state # 改变状态
+                    label_dict['scene'] = scene # 改变状态
+                    json.dump(label_dict, f, indent=4, ensure_ascii=False)
+
+    finally:
+        print('destroying actors')
+        if camera_actor:
+            camera_actor.destroy()
+        print('destroy actors: ', len(actor_list))
+        client.apply_batch([carla.command.DestroyActor(x) for x in actor_list])
 
 
-def check_dict_type(checked_dict: dict, valid_dict: dict):
-    for key in valid_dict.keys():
-        if isinstance(valid_dict[key], dict):
-            if not check_dict_type(checked_dict[key], valid_dict[key]):
-                return False
-        else:
-            if not isinstance(checked_dict[key], valid_dict[key]):
-                print(f'[Invalid] {key} got {type(checked_dict[key])}, but expected {valid_dict[key]}')
-                return False
-    return True
+class Settings:
+    bloom_intensity: float = 0.675    # 0.675   Intensity for the bloom post-process effect, 0.0 for disabling it.
+    fov: float = 90.0                 # 90.0    Horizontal field of view in degrees.
+    fstop: float = 2.8                # 1.4     Opening of the camera lens. Aperture is 1/fstop with typical lens going down to f/1.2 (larger opening). Larger numbers will reduce the Depth of Field effect.
+    image_size = [800, 800]           # 600     Image height in pixels.
+    iso: float = 100                  # 100     The camera sensor sensitivity.
+    gamma: float = 2.2                # 2.2     Target gamma value of the camera.
+    lens_flare_intensity: float = 0.1 # 0.1     Intensity for the lens flare post-process effect, 0.0 for disabling it.
+    sensor_tick: float = 0.1          # 0.0     Simulation seconds between sensor captures (ticks).
+    shutter_speed: float = 3000.0     # 200.0   The camera shutter speed in seconds (1.0/s).
 
 
-class ColorConsole:
+def save_img(image, image_sizes: List[int], save_path: str):
+    # print(image)
+    img_raw_bytes = np.array(image.raw_data)
+    img_channel_4 = img_raw_bytes.reshape((image_sizes[0], image_sizes[1], 4))
+    img_channel3 = img_channel_4[:, :, : 3]
+    cv2.imwrite(save_path, img_channel3)
+
+
+class Color:
     reset = '\033[0m'
     red = '\033[00;31m'
     redl = '\033[01;31m'
@@ -170,60 +225,5 @@ class ColorConsole:
     grayl = '\033[00;37m'
 
 
-class CameraManager:
-    class Settings:
-        bloom_intensity: float = 0.675    # 0.675   Intensity for the bloom post-process effect, 0.0 for disabling it.
-        fov: float = 90.0                 # 90.0    Horizontal field of view in degrees.
-        fstop: float = 1.4                # 1.4     Opening of the camera lens. Aperture is 1/fstop with typical lens going down to f/1.2 (larger opening). Larger numbers will reduce the Depth of Field effect.
-        image_size_x: int = 800           # 800     Image width in pixels.
-        image_size_y: int = 800           # 600     Image height in pixels.
-        iso: float = 100                  # 100     The camera sensor sensitivity.
-        gamma: float = 2.2                # 2.2     Target gamma value of the camera.
-        lens_flare_intensity: float = 0.1 # 0.1     Intensity for the lens flare post-process effect, 0.0 for disabling it.
-        sensor_tick: float = 0.0          # 0.0     Simulation seconds between sensor captures (ticks).
-        shutter_speed: float = 1500.0     # 200.0   The camera shutter speed in seconds (1.0/s).
-
-    def __init__(self, blueprint_library) -> None:
-        self.blueprint_library = blueprint_library
-
-    def get_camera_rgb_blueprint(self):
-        blueprint_library = self.blueprint_library
-        bp = blueprint_library.find('sensor.camera.rgb')
-        bp.set_attribute('image_size_x', str(self.Settings.image_size_x))
-        bp.set_attribute('image_size_y', str(self.Settings.image_size_y))
-        bp.set_attribute('sensor_tick', str(self.Settings.sensor_tick))
-        bp.set_attribute('shutter_speed', str(self.Settings.shutter_speed))
-        # print('fov', self.Settings.fov)
-        bp.set_attribute('fov', str(self.Settings.fov))
-        return bp
-
-    def get_camera_instance_segmentation_blueprint(self):
-        blueprint_library = self.blueprint_library
-        bp = blueprint_library.find('sensor.camera.instance_segmentation')
-        bp.set_attribute('image_size_x', str(self.Settings.image_size_x))
-        bp.set_attribute('image_size_y', str(self.Settings.image_size_y))
-        bp.set_attribute('sensor_tick', str(self.Settings.sensor_tick))
-        bp.set_attribute('fov', str(self.Settings.fov))
-        return bp
-
-    @staticmethod
-    def save_img(image, image_sizes: List[int], save_path: str, bounding_boxes=None):
-        # print(image)
-        img_raw_bytes = np.array(image.raw_data)
-        img_channel_4 = img_raw_bytes.reshape((image_sizes[0], image_sizes[1], 4))
-        img_channel3 = img_channel_4[:, :, : 3]
-        # img_channel3 = ClientSideBoundingBoxes.draw_bounding_boxes(img_channel3, bounding_boxes)
-        if True:
-            cv2.imwrite(save_path, img_channel3)
-
-
 if __name__ == '__main__':
-    Args.Dirs.update()
-
-    try:
-        main()
-
-    except KeyboardInterrupt:
-        pass
-    finally:
-        print('[Exit].')
+    main()

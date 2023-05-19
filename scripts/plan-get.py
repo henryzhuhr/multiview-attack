@@ -12,23 +12,23 @@ import numpy as np
 import carla
 
 sys.path.append(os.getcwd())
-from tsgan import types
+from models.data import types
 
 
 class Settings:
 
-    data_root = "tmp/data"
+    data_root = "tmp/data-Town03"
     # client.get_available_maps()
     maps = [
                     # 'Town01',
                     # 'Town02',
-                    # 'Town03',
+                    'Town03',
                     # 'Town04',
                     # 'Town06',
-                    # 'Town07',
+                    #'Town07',
                     # 'Town05',
-        'Town10HD', # Finish
-                    # 'Town11',
+        # 'Town10HD', # Finish
+        #'Town11',
     ]
 
     # [x,y,z,fov]

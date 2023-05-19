@@ -1,9 +1,11 @@
+import json
 import os, sys
 import argparse
 import logging
 
 from pathlib import Path
 import random
+import time
 
 from typing import List
 import cv2
@@ -55,7 +57,8 @@ def get_args():
     parser.add_argument('--pretrained', type=str)
 
     args: ArgsType = parser.parse_args()
-    args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(cstr(args))
 
     return args
 
@@ -138,23 +141,22 @@ def prepare_training(args: ArgsType):
 
 def train():
     args = get_args()
-    print(cstr(args))
     nowt = datetime.datetime.now().strftime("%m%d%H%M")
-    args.save_dir = args.save_dir + "-" + nowt
+    args.save_dir = os.path.join("tmp", f"{args.save_dir}-{nowt}")
 
-    os.makedirs(sample_save_dir := os.path.join("tmp", args.save_dir, "sample"), exist_ok=True)
-    os.makedirs(checkpoint_save_dir := os.path.join("tmp", args.save_dir, "checkpoint"), exist_ok=True)
-    logging.basicConfig(
-        format='[%(levelname)s][%(asctime)s] %(message)s',
-        level=logging.INFO,
-        filename=os.path.join("tmp", args.save_dir, f'train.log'),
-        filemode='a',
-    )
+    os.makedirs(sample_save_dir := os.path.join(args.save_dir, "sample"), exist_ok=True)
+    os.makedirs(checkpoint_save_dir := os.path.join(args.save_dir, "checkpoint"), exist_ok=True)
+
+    logger_format = '[%(levelname)s][%(asctime)s] %(message)s'
+    logging.basicConfig(format=logger_format, level=logging.INFO, filename=f'{args.save_dir}/train.log', filemode='a')
+
+    with open(os.path.join(args.save_dir, f'args.json'), "w") as f:
+        json.dump({k: v for (k, v) in args._get_kwargs()}, f, indent=4)
 
     (neural_renderer, model, detector, detector_loss, optimizer, lr_heduler, train_loader) = prepare_training(args)
     device = args.device
 
-    n_r = 0.001
+    n_r = 0.1
 
     # ----------------------------------------------
     #   start training
@@ -172,8 +174,6 @@ def train():
         data_num = 0
         loss_zero = torch.tensor(0).to(device)
 
-        accum = 0.5**(32 / (10 * 1000))
-
         pbar = tqdm.tqdm(train_loader)
         model.generator.train()
         if True:
@@ -183,8 +183,8 @@ def train():
                 bs = images.shape[0]
                 data_num += bs
 
-                tt = neural_renderer.textures[:, neural_renderer.selected_faces, :]
-                xs_t = tt.repeat(args.batch, *[1] * (len(tt.size()) - 1))
+                x_t = (neural_renderer.textures[:, neural_renderer.selected_faces, :]).clone()
+                xs_t = x_t.repeat(args.batch, *[1] * (len(x_t.size()) - 1))
                 xs_n = torch.rand_like(xs_t)         # x_{noise}
                 xs_i = (1 - n_r) * xs_t + n_r * xs_n # x_{texture with noise}
                 xs_adv = model.decode(model.forward(xs_i, labels))
@@ -244,21 +244,16 @@ def train():
                 lcls_epoch += lcls.item() * bs
                 ldet_epoch += ldet.item() * bs
 
-                if i_mb % 4 == 0:
-                    loss_smooth = 0.05 * F.mse_loss(xs_t, xs_adv)
-                    loss_smooth_epoch += loss_smooth.item() * bs / 4
-                else:
-                    loss_smooth = loss_zero
+                loss_smooth = 0.05 * F.mse_loss(xs_t, xs_adv)
+                loss_smooth_epoch += loss_smooth.item() * bs
 
                 loss_adv = lbox + lobj + lcls # + loss_smooth
 
-                ladv_epoch += (lbox + lobj + lcls).item() * bs + loss_smooth * bs * 4
+                ladv_epoch += (lbox + lobj + lcls).item() * bs + loss_smooth * bs
 
                 optimizer.zero_grad()
                 loss_adv.backward()
                 optimizer.step()
-
-                # accumulate(g_ema, generator, accum)
 
                 pbar.set_description(" ".join((
                     f"{cstr('adv')}:{loss_adv.item():.4f}",
@@ -271,10 +266,10 @@ def train():
         lr_heduler.step()
 
         #  Valid
-        if epoch % 10 == 0:
+        if epoch % 1 == 0:
             model.generator.eval()
 
-            x_t = neural_renderer.textures[:, neural_renderer.selected_faces, :]
+            x_t = (neural_renderer.textures[:, neural_renderer.selected_faces, :]).clone()
             train_set = train_loader.dataset
             random_indexs = random.sample(range(len(train_set)), 6)
             pbar = tqdm.tqdm(random_indexs)
@@ -324,7 +319,7 @@ def train():
         epoch_loss_dict = {
             "LAdv": ladv_epoch / data_num,
             "LDet": ldet_epoch / data_num,
-            "Ls": loss_smooth_epoch / data_num / 4,
+            "Ls": loss_smooth_epoch / data_num,
             "lcls": lcls_epoch / data_num,
             "lbox": lbox_epoch / data_num,
             "lobj": lobj_epoch / data_num,
@@ -361,7 +356,7 @@ def accumulate(model1: nn.Module, model2: nn.Module, decay=0.999):
 def render_a_image(
     neural_renderer: NeuralRenderer, x_texture: torch.Tensor, base_image: torch.Tensor, render_params: dict
 ):
-    tt_adv = neural_renderer.textures
+    tt_adv = neural_renderer.textures.clone()
     tt_adv[:, neural_renderer.selected_faces, :] = x_texture
     neural_renderer.set_render_perspective(render_params["ct"], render_params["vt"], render_params["fov"])
     rgb_image, _, alpha_image = neural_renderer.forward(F.tanh(tt_adv))
@@ -371,4 +366,7 @@ def render_a_image(
 
 
 if __name__ == "__main__":
+    proj_st = time.time()
     train()
+    proj_time = time.time() - proj_st
+    print("project time: %d h: %d m: %d s" % (proj_time // 3600, (proj_time % 3600) // 60, proj_time % 60))
