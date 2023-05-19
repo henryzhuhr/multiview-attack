@@ -144,10 +144,9 @@ class NeuralRenderer(nn.Module):
                 cosfi = p[0] / np.sqrt(p[0]**2 + p[1]**2)
                 sinfi = p[1] / np.sqrt(p[0]**2 + p[1]**2)
 
-            cossum = cosfi * np.cos(np.radians(vehicle_transform.rotation.yaw)
-                                   ) + sinfi * np.sin(np.radians(vehicle_transform.rotation.yaw))
-            sinsum = np.cos(np.radians(vehicle_transform.rotation.yaw)
-                           ) * sinfi - np.sin(np.radians(vehicle_transform.rotation.yaw)) * cosfi
+            yaw_rad = 0#np.radians(vt.rotation.yaw)
+            cossum = cosfi * np.cos(yaw_rad) + sinfi * np.sin(yaw_rad)
+            sinsum = np.cos(yaw_rad) * sinfi - np.sin(yaw_rad) * cosfi
             trans_p.append([np.sqrt(p[0]**2 + p[1]**2) * cossum, np.sqrt(p[0]**2 + p[1]**2) * sinsum, p[2]])
 
         eye = [
