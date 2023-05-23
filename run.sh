@@ -14,7 +14,7 @@ export CUDA_VISIBLE_DEVICES=0
 
 # python train-tgan.py  \
 #     --save_dir train \
-#     --obj_model assets/vehicle-YZ.obj \
+#     --obj_model assets/vehicle.obj \
 #     --selected_faces assets/faces-std.txt \
 #     --pretrained tmp/autoencoder/ae-std.pt \
 #     --categories "dog" \
@@ -22,7 +22,7 @@ export CUDA_VISIBLE_DEVICES=0
     
 python train-tgan.py  \
     --save_dir train \
-    --obj_model assets/vehicle-YZ.obj \
+    --obj_model assets/vehicle.obj \
     --selected_faces assets/faces-std.txt \
     --pretrained tmp/autoencoder/ae-std.pt \
     --categories "person" \
@@ -31,7 +31,7 @@ python train-tgan.py  \
 
 python train-tgan.py  \
     --save_dir train \
-    --obj_model assets/vehicle-YZ.obj \
+    --obj_model assets/vehicle.obj \
     --selected_faces assets/faces-std.txt \
     --pretrained tmp/autoencoder/ae-std.pt \
     --categories "fork" \
@@ -40,7 +40,7 @@ python train-tgan.py  \
 
 # python train-tgan.py  \
 #     --save_dir train \
-#     --obj_model assets/vehicle-YZ.obj \
+#     --obj_model assets/vehicle.obj \
 #     --selected_faces assets/faces-std.txt \
 #     --pretrained tmp/autoencoder/ae-std.pt \
 #     --categories "dog" \
@@ -48,7 +48,7 @@ python train-tgan.py  \
 
 # python train-tgan.py  \
 #     --save_dir attack-bowl \
-#     --obj_model assets/vehicle-YZ.obj \
+#     --obj_model assets/vehicle.obj \
 #     --selected_faces assets/faces-std.txt \
 #     --pretrained tmp/autoencoder/ae-std.pt \
 #     --categories "dog" "apple" \
@@ -56,7 +56,7 @@ python train-tgan.py  \
 
 # python train-tgan.py  \
 #     --save_dir attack_l1 \
-#     --obj_model assets/vehicle-YZ.obj \
+#     --obj_model assets/vehicle.obj \
 #     --selected_faces assets/faces-less.txt \
 #     --pretrained tmp/autoencoder/ae-less.pt \
 #     --categories "dog" "bowl" "apple" "airplane" \

@@ -48,13 +48,14 @@ def get_args():
     parser.add_argument("--lr", type=float, default=0.002, help="learning rate")
     parser.add_argument("--milestones", type=int, nargs='+', default=[50, 100])
 
-    parser.add_argument('--obj_model', type=str, default="data/models/vehicle-YZ.obj")
+    parser.add_argument('--obj_model', type=str, default="assets/vehicle.obj")
     parser.add_argument('--selected_faces', type=str, default="data/models/selected_faces.txt")
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=1024)
 
     parser.add_argument('--categories', type=str, nargs='+', default=["dog"])
-    parser.add_argument('--pretrained', type=str)
+    parser.add_argument('--pretrained', type=str, help="only for pretained AE")
+    parser.add_argument('--resume', type=str, help="the checkpoint")
 
     args: ArgsType = parser.parse_args()
     args.device = "cuda" if torch.cuda.is_available() else "cpu"

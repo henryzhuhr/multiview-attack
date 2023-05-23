@@ -21,7 +21,7 @@ save_scene = False # 是否保存场景图
 
 
 class Args:
-    world_map = "Town02"
+    world_map = "Town10HD"
     data_root = f"tmp/data-maps"
 
     class Dirs:

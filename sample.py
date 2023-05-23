@@ -38,7 +38,7 @@ class TypeArgs(metaclass=abc.ABCMeta):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--obj_model', type=str, default='assets/vehicle-YZ.obj')
+    parser.add_argument('--obj_model', type=str, default='assets/vehicle.obj')
     parser.add_argument('--selected_faces', type=str, default='assets/faces-std.txt')
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=1024)

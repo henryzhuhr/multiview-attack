@@ -27,7 +27,7 @@ cstrw = lambda s: f"\033[01;33m{s}\033[0m"
 class CarlaDatasetDir:
     def __init__(self, root, data_type: str = None) -> None:
         base_root = os.path.join(root, data_type) if data_type is not None else root
-        self.images_dir = os.path.join(base_root, "scenes")
+        self.images_dir = os.path.join(base_root, "images")
         self.labels_dir = os.path.join(base_root, "labels")
         self.segmentations_dir = os.path.join(base_root, "segmentations")
 
@@ -54,7 +54,7 @@ class CarlaDataset(data.Dataset):
             raise TypeError
 
         self.carla_dir = carla_dir
-        self.carla_label_list = carla_label_list
+        self.carla_label_list = carla_label_list[: 10]
         self.is_train = is_train
         self.categories_list = categories_list
         self.coco_ic_map = coco_index_category # {"class_name":index}
@@ -113,7 +113,13 @@ class CarlaDataset(data.Dataset):
         camera_transform = CarlaDataset.convert_dict_transform(label_dict["camera"])
         fov = label_dict["camera"]["fov"]
         name = label_dict["name"]
-        return {"name": name, "vehicle_transform": vehicle_transform, "camera_transform": camera_transform, "fov": fov}
+        return {
+            "name": name,
+            "file": label_path,
+            "vehicle_transform": vehicle_transform,
+            "camera_transform": camera_transform,
+            "fov": fov
+        }
 
 
 class CroppedCOCOCarlaMixDataset(CroppedCOCO):

@@ -26,12 +26,18 @@ class Settings:
         'Town06',
         'Town07',
         'Town05',
-        'Town10HD',
-        # 'Town11',
+                   # 'Town10HD',
+                   # 'Town11',
     ]
 
     # [x,y,z,fov]
-    camera_distances = [
+    camera_distances = [ # train
+        [5, 4, 2, 90],
+        [5, 5, 2.5, 90],
+        [6, 4, 3, 90],
+        [7, 4, 2, 90],
+    ]
+    camera_distances = [ # eval
         [5, 4, 2, 90],
         [5, 5, 2.5, 90],
         [6, 4, 3, 90],
@@ -39,7 +45,7 @@ class Settings:
     ]
 
 
-def generate_plan(world_map: str,data_root:str):
+def generate_plan(world_map: str, data_root: str):
     start_time = time.time()
     client = None
     actor_list = []
@@ -120,10 +126,7 @@ def generate_plan(world_map: str,data_root:str):
                             indent=4,
                             ensure_ascii=False
                         )
-                    # print(
-                    #     f'\033[1;32m[Map]\033[0m {world_map}',  #
-                    #     f'\033[1;32m[Save]\033[0m {save_name}', #
-                    # )
+
 
     except RuntimeError as e:
         print(ColorConsole.red, '[RuntimeError]', ColorConsole.reset, f'in Map:{world_map}', e)
@@ -140,7 +143,7 @@ def generate_plan(world_map: str,data_root:str):
 def main():
     for world_map in Settings.maps:
         data_root = f"{Settings.data_root}/{world_map}"
-        generate_plan(world_map,data_root)
+        generate_plan(world_map, data_root)
 
 
 class ColorConsole:

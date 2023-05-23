@@ -1,3 +1,4 @@
+import json
 from nis import cat
 import os
 import argparse
@@ -28,7 +29,8 @@ def get_args():
     parser.add_argument("--mix_prob", type=float, default=0.9)
     parser.add_argument("--lr", type=float, default=0.002)
 
-    parser.add_argument('--pretrained', type=str, default="tmp/attack-两类-05200909/checkpoint/gan-299.pt")
+    parser.add_argument('--world_map', type=str, default="Town10HD")
+    parser.add_argument('--pretrained', type=str, default="tmp/train-person-05221615/checkpoint/_generator.pt")
 
     args = parser.parse_args()
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -45,6 +47,7 @@ class ArgsType:
     lr: float
     milestones: List[int]
 
+    world_map: str
     pretrained: str
 
 
@@ -69,11 +72,11 @@ def main():
     mix_prob = pargs["mix_prob"]
 
     nowt = datetime.datetime.now().strftime("%m%d%H%M")
-    base_save_dir = f"tmp/eval-{'_'.join(cats)}-{nowt}"
+    base_save_dir = f"tmp/eval-{args.world_map}-{'_'.join(cats)}-{nowt}"
     os.makedirs(base_save_dir, exist_ok=True)
 
     device = args.device
-    data_set = CarlaDataset(carla_root="tmp/data-Town01", categories=cats,is_train=False)
+    data_set = CarlaDataset(carla_root=f"tmp/data-maps/{args.world_map}", categories=cats, is_train=False)
     num_classes = len(data_set.coco_ic_map)
 
     # --- Load Neural Renderer ---
@@ -112,8 +115,10 @@ def main():
     x_n = torch.rand_like(x_t)
     x_i = (1 - n_r) * x_t + n_r * x_n                                              # x_{texture with noise}
 
+    id_name_maps = {}
     pbar = tqdm.tqdm(data_set)
     for i_d, item in enumerate(pbar):
+        
         pbar.set_description(f"[{i_d}] {item['file']}")
         image = item["image"].to(device)
         r_p = {"ct": item["ct"], "vt": item["vt"], "fov": item["fov"]}
@@ -123,6 +128,7 @@ def main():
             label = torch.tensor(data_set.coco_ci_map[cat]).unsqueeze(0).to(device)
 
             image_list = []
+            bboxes_list = []
             for adv_type, x_ in {
                 "org": x_t,
                 "clean": x_t,
@@ -137,13 +143,15 @@ def main():
                     pred_results = non_max_suppression(eval_pred, conf_thres, iou_thres, None, False)[0]
 
                 atk_class = data_set.coco_ic_map[int(label.item())]
-                # cv2.putText(render_img, f"Attack:{atk_class}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 detect_img = render_img.copy()
+                bboxes = []
+                w, h = detect_img.shape[: 2]
                 if len(pred_results):
-                    for *xyxy, conf, cls in pred_results:
-                        pclass = data_set.coco_ic_map[int(cls)]
+                    for *xyxy, conf, category in pred_results:
+                        pclass = data_set.coco_ic_map[int(category)]
                         text = f'{pclass}:{conf:.2f}'
                         x1, y1, x2, y2 = [int(xy) for xy in xyxy]
+
                         if pclass in cats:
                             color = COLOR_MAP[1 + cats.index(pclass)]
                         elif pclass == "car":
@@ -152,10 +160,16 @@ def main():
                             color = (255, 255, 255)
                         cv2.rectangle(detect_img, (x1, y1), (x2, y2), color, 2)
                         cv2.putText(detect_img, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+
+                        bboxes.append(
+                            [0, int(category), (x1 + x2) / 2 / w, (y1 + y2) / 2 / h, (x2 - x1) / w, (y2 - y1) / h]
+                        )
                 if adv_type == "org":
                     image_list.append(render_img)
                 else:
                     image_list.append(detect_img)
+                if adv_type == "clean":
+                    bboxes_list.append(bboxes)
             cat_render_img = cv2.vconcat(image_list)
             class_concat_imgs.append(cat_render_img)
 
@@ -172,11 +186,19 @@ def main():
             for i_img, img in enumerate(image_list):
                 cv2.imwrite(f"{single_save_dir}/{i_d}-{atk_class}-{i_img}.png", img)
 
+            id_name_maps[i_d] = {
+                "file": item["file"],
+                "bboxes": bboxes_list,
+            }
+
+
         concat_img = cv2.hconcat(class_concat_imgs)
         os.makedirs(aa_save_dir := f"{base_save_dir}/concat", exist_ok=True) # class
         cv2.imwrite(f"{aa_save_dir}/{i_d}.png", concat_img)
         cv2.imwrite("tmp/__eval__.png", concat_img)
 
+    with open(f"{base_save_dir}/id_name_maps.json", "w") as f:
+        json.dump(id_name_maps, f, indent=4)
 
 def render_a_image(
     neural_renderer: NeuralRenderer, x_texture: torch.Tensor, base_image: torch.Tensor, render_params: dict
