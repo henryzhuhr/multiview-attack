@@ -16,36 +16,35 @@ from models.data import types
 
 
 class Settings:
-
-    data_root = "tmp/data-Town03"
-    # client.get_available_maps()
+    world_map = "Town10HD"
+    data_root = "tmp/data-maps"
     maps = [
-                    # 'Town01',
-                    # 'Town02',
-                    'Town03',
-                    # 'Town04',
-                    # 'Town06',
-                    #'Town07',
-                    # 'Town05',
-        # 'Town10HD', # Finish
-        #'Town11',
+        'Town01',
+        'Town02',
+        'Town03',
+        'Town04',
+        'Town06',
+        'Town07',
+        'Town05',
+        'Town10HD',
+        # 'Town11',
     ]
 
     # [x,y,z,fov]
     camera_distances = [
-       [5, 4, 2, 90],
+        [5, 4, 2, 90],
         [5, 5, 2.5, 90],
-        [6, 4, 3, 90], 
+        [6, 4, 3, 90],
         [7, 4, 2, 90],
     ]
 
 
-def generate_plan(world_map: str):
+def generate_plan(world_map: str,data_root:str):
     start_time = time.time()
     client = None
     actor_list = []
 
-    label_save_dir = os.path.join(Settings.data_root, 'labels')
+    label_save_dir = os.path.join(data_root, 'labels')
     try:
         client = carla.Client('localhost', 2000)
         client.set_timeout(10)
@@ -84,9 +83,6 @@ def generate_plan(world_map: str):
                         json.dump(
                             {
                                 "name": save_name,
-                                "image": save_name + ".png",
-                                "state": False,
-                                "scene": False,
                                 "map": world_map,
                                 "vehicle":
                                     {
@@ -128,7 +124,7 @@ def generate_plan(world_map: str):
                     #     f'\033[1;32m[Map]\033[0m {world_map}',  #
                     #     f'\033[1;32m[Save]\033[0m {save_name}', #
                     # )
-        
+
     except RuntimeError as e:
         print(ColorConsole.red, '[RuntimeError]', ColorConsole.reset, f'in Map:{world_map}', e)
     else:
@@ -143,7 +139,8 @@ def generate_plan(world_map: str):
 
 def main():
     for world_map in Settings.maps:
-        generate_plan(world_map)
+        data_root = f"{Settings.data_root}/{world_map}"
+        generate_plan(world_map,data_root)
 
 
 class ColorConsole:
@@ -174,20 +171,16 @@ class Utils:
             [x, y, z],
             [x, y, z],
             [x, y, z],
-            
             [0, y, z],
             [-x, y, z],
             [-x, y, z],
             [-x, y, z],
-
             [-x, 0, z],
             [-x, -y, z],
             [-x, -y, z],
-
             [0, -y, z],
             [x, -y, z],
             [x, -y, z],
-            
         ]
         return random.sample(e, 2)
 

@@ -24,8 +24,6 @@ cstrs = lambda s: f"\033[01;36m{s}\033[0m"
 cstrw = lambda s: f"\033[01;33m{s}\033[0m"
 
 
-
-
 class CarlaDatasetDir:
     def __init__(self, root, data_type: str = None) -> None:
         base_root = os.path.join(root, data_type) if data_type is not None else root
@@ -35,7 +33,7 @@ class CarlaDatasetDir:
 
 
 class CarlaDataset(data.Dataset):
-    def __init__(self, carla_root: str, categories: Union[str, List[str]]):
+    def __init__(self, carla_root: str, categories: Union[str, List[str]], is_train=True):
 
         carla_label_list = []
         carla_dir = CarlaDatasetDir(carla_root)
@@ -57,18 +55,24 @@ class CarlaDataset(data.Dataset):
 
         self.carla_dir = carla_dir
         self.carla_label_list = carla_label_list
+        self.is_train = is_train
         self.categories_list = categories_list
-        self.coco_ic_map = coco_index_category                                                        # {"class_name":index}
-        self.coco_ci_map = coco_category_index                                                        # {"index":class_name}
-
+        self.coco_ic_map = coco_index_category # {"class_name":index}
+        self.coco_ci_map = coco_category_index # {"index":class_name}
 
     def __len__(self):
-        return self.carla_label_list.__len__()
+        max_data = 256
+        if (self.is_train) and (self.carla_label_list.__len__() > max_data):
+            return max_data
+        else:
+            return self.carla_label_list.__len__()
 
     def __getitem__(self, index: int):
         # carla
-        # item = random.choice(self.carla_label_list)
-        item = self.carla_label_list[index]
+        if self.is_train:
+            item = random.choice(self.carla_label_list)
+        else:
+            item = self.carla_label_list[index]
         image_file = os.path.join(self.carla_dir.images_dir, f"{item['name']}.png")
         image = torch.from_numpy(cv2.imread(image_file)).permute(2, 0, 1).unsqueeze(0).float() / 255.
         label = torch.tensor(random.choice(self.categories_list)).unsqueeze(0)
@@ -76,6 +80,7 @@ class CarlaDataset(data.Dataset):
             "image": image,
             "label": label,
             "name": item["name"],
+            "file": image_file,
             "vt": item["vehicle_transform"],
             "ct": item["camera_transform"],
             "fov": item["fov"],

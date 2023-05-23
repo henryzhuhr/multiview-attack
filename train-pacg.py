@@ -335,7 +335,14 @@ def train():
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "args": args
-            }, f"{checkpoint_save_dir}/gan-{epoch}.pt"
+            }, f"{checkpoint_save_dir}/generator-{epoch}.pt"
+        )
+        torch.save(
+            {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "args": args
+            }, f"{checkpoint_save_dir}/_generator.pt"
         )
 
 

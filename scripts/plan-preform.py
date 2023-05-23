@@ -10,16 +10,19 @@ import json
 import cv2
 import numpy as np
 import carla
+import tqdm
 
 sys.path.append(os.getcwd())
 from models.data import types
 
 tm_port = 8000
 
+save_scene = False # 是否保存场景图
+
 
 class Args:
-    world_map = "Town03"
-    data_root = "tmp/data-Town03"
+    world_map = "Town02"
+    data_root = f"tmp/data-maps"
 
     class Dirs:
         image = 'images'
@@ -28,14 +31,124 @@ class Args:
 
         @staticmethod
         def update():
-            Args.Dirs.label = os.path.join(Args.data_root, Args.Dirs.label)
-            Args.Dirs.image = os.path.join(Args.data_root, Args.Dirs.image)
-            Args.Dirs.scene = os.path.join(Args.data_root, Args.Dirs.scene)
+            Args.Dirs.label = os.path.join(Args.data_root, Args.world_map, Args.Dirs.label)
+            Args.Dirs.image = os.path.join(Args.data_root, Args.world_map, Args.Dirs.image)
+            Args.Dirs.scene = os.path.join(Args.data_root, Args.world_map, Args.Dirs.scene)
             os.makedirs(Args.Dirs.image, exist_ok=True)
             os.makedirs(Args.Dirs.scene, exist_ok=True)
 
 
 Args.Dirs.update()
+
+
+def main():
+    label_dicts = get_labels(Args.Dirs.label)
+
+    actor_list: List[types.carla.Actor] = []
+    vehicle_bps = []
+    walkers_list = []
+    camera_actor: types.carla.Actor = None
+    try:
+        client = carla.Client('localhost', 2000)
+        client.set_timeout(10.0)
+        world = client.load_world(Args.world_map)
+        # world = client.get_world()
+
+        traffic_manager = client.get_trafficmanager(tm_port)      # 获取交通管理器
+        traffic_manager.set_global_distance_to_leading_vehicle(2) # 与前车距离
+
+        # 获取蓝图
+        blueprint_library = world.get_blueprint_library()
+        vehicle_bps = blueprint_library.filter('vehicle')
+        filter_out = [
+                       # 'vehicle.tesla.model3',
+        ]
+        vehicle_bps = [x for x in vehicle_bps if (x.id not in filter_out)]
+        vehicle_bps = vehicle_bps + vehicle_bps + vehicle_bps
+        print(f" -- Get {len(vehicle_bps)} vehicles")
+
+        # 获取出生点
+        spawn_points = world.get_map().get_spawn_points()
+        # 生成车辆
+        pbar = tqdm.tqdm(vehicle_bps)
+        for bp in pbar:
+            shuffled_list = spawn_points.copy()
+            random.shuffle(shuffled_list)
+            for transform in shuffled_list:
+                actor = world.try_spawn_actor(bp, transform)
+                if actor is not None:
+                    actor_list.append(actor)
+                    actor.set_autopilot(True)
+                    pbar.set_description('created %s' % actor.type_id)
+                    break
+
+        # 加载 Model3
+        vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
+
+        # 加载 Camera
+        camera_bp = blueprint_library.find('sensor.camera.rgb')
+        camera_bp.set_attribute('image_size_x', str(Settings.image_size[0]))
+        camera_bp.set_attribute('image_size_y', str(Settings.image_size[1]))
+        camera_bp.set_attribute('sensor_tick', str(Settings.sensor_tick))
+        camera_bp.set_attribute('shutter_speed', str(Settings.shutter_speed))
+
+        pbar = tqdm.tqdm(label_dicts.items())
+        time.sleep(3)
+        for label_file, label_dict in pbar:
+            pbar.set_description(label_dict['name'])
+
+            save_file = label_dict['name'] + ".png"
+
+            image_save = os.path.join(Args.Dirs.image, save_file)
+            scene_save = os.path.join(Args.Dirs.scene, save_file)
+
+            if save_scene and os.path.exists(image_save):
+                save_file_path = scene_save
+            else:
+                save_file_path = image_save
+            if os.path.exists(save_file_path):
+                continue
+
+            vehicle_transform = dict_to_carla_transform(label_dict['vehicle'])
+            camera_transform = dict_to_carla_transform(label_dict['camera'])
+
+            camera_bp.set_attribute('fov', str(label_dict['camera']["fov"]))
+
+            try:
+                vehicle_actor: types.carla.Actor = world.spawn_actor(vehicle_bp, vehicle_transform)
+            except:
+                continue
+
+            time.sleep(1)
+            camera_actor: types.carla.Actor = world.spawn_actor(
+                camera_bp,
+                camera_transform,
+                attach_to=vehicle_actor,
+                attachment_type=carla.AttachmentType.Rigid,
+            )
+
+            if not save_scene:
+                vehicle_actor.destroy()
+                time.sleep(2)
+
+            camera_actor.listen(lambda image: save_img(image, Settings.image_size, save_file_path))
+
+            time.sleep(1)
+
+            if camera_actor:
+                camera_actor.stop()
+                carla.command.DestroyActor(camera_actor)
+            if vehicle_actor:
+                carla.command.DestroyActor(vehicle_actor)
+
+    except KeyboardInterrupt:
+        print(' - Keyboard Interrupt')
+    finally:
+        print('destroying actors')
+        if camera_actor:
+            camera_actor.destroy()
+        print('destroy actors: ', len(actor_list))
+        client.apply_batch([carla.command.DestroyActor(x) for x in actor_list])
 
 
 def get_labels(label_dir: str):
@@ -62,127 +175,6 @@ def dict_to_carla_transform(transform_dict: dict) -> types.carla.Transform:
             roll=transform_dict['rotation']['roll']
         ),
     )
-
-
-def main():
-    label_dicts = get_labels(Args.Dirs.label)
-
-    actor_list: List[types.carla.Actor] = []
-    vehicle_bps = []
-    walkers_list = []
-    camera_actor: types.carla.Actor = None
-    try:
-        client = carla.Client('localhost', 2000)
-        client.set_timeout(2.0)
-        world = client.load_world(Args.world_map)
-        # world = client.get_world()
-
-        traffic_manager = client.get_trafficmanager(tm_port)      # 获取交通管理器
-        traffic_manager.set_global_distance_to_leading_vehicle(2) # 与前车距离
-
-        # 获取蓝图
-        blueprint_library = world.get_blueprint_library()
-        vehicle_bps = blueprint_library.filter('vehicle')
-        filter_out = [
-                       # 'vehicle.tesla.model3',
-        ]
-        vehicle_bps = [x for x in vehicle_bps if (x.id not in filter_out)]
-        vehicle_bps = vehicle_bps + vehicle_bps
-        print(f" -- Get {len(vehicle_bps)} vehicles")
-
-        # 获取出生点
-        spawn_points = world.get_map().get_spawn_points()
-        # 生成车辆
-        for bp in vehicle_bps:
-            shuffled_list = spawn_points.copy()
-            random.shuffle(shuffled_list)
-            for transform in shuffled_list:
-                actor = world.try_spawn_actor(bp, transform)
-                if actor is not None:
-                    actor_list.append(actor)
-                    actor.set_autopilot(True)
-                    print('created %s' % actor.type_id)
-                    break
-
-        # 加载 Model3
-        vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
-
-        # 加载 Camera
-        camera_bp = blueprint_library.find('sensor.camera.rgb')
-        camera_bp.set_attribute('image_size_x', str(Settings.image_size[0]))
-        camera_bp.set_attribute('image_size_y', str(Settings.image_size[1]))
-        camera_bp.set_attribute('sensor_tick', str(Settings.sensor_tick))
-        camera_bp.set_attribute('shutter_speed', str(Settings.shutter_speed))
-
-        time.sleep(1)
-        for label_file, label_dict in label_dicts.items():
-
-            save_file = label_dict['name'] + ".png"
-            scene_image = os.path.join(Args.Dirs.scene, save_file)
-            state_image = os.path.join(Args.Dirs.image, save_file)
-            state = scene = False
-            if os.path.exists(scene_image):
-                scene = True
-            # if os.path.exists(state_image):
-            state = True
-            if state and scene:
-                continue
-            if not scene:
-                save_file_path = scene_image
-            else:
-                save_file_path = state_image
-
-            vehicle_transform = dict_to_carla_transform(label_dict['vehicle'])
-            camera_transform = dict_to_carla_transform(label_dict['camera'])
-
-            camera_bp.set_attribute('fov', str(label_dict['camera']["fov"]))
-
-            try:
-                vehicle_actor: types.carla.Actor = world.spawn_actor(vehicle_bp, vehicle_transform)
-            except:
-                continue
-            else:
-                time.sleep(1)
-                camera_actor: types.carla.Actor = world.spawn_actor(
-                    camera_bp,
-                    camera_transform,
-                    attach_to=vehicle_actor,
-                    attachment_type=carla.AttachmentType.Rigid,
-                )
-
-                if not scene:
-                    vehicle_actor.destroy()
-                    time.sleep(1)
-
-                camera_actor.listen(lambda image: save_img(image, Settings.image_size, save_file_path))
-
-                time.sleep(2)
-
-                if camera_actor:
-                    camera_actor.stop()
-                    carla.command.DestroyActor(camera_actor)
-                if vehicle_actor:
-                    carla.command.DestroyActor(vehicle_actor)
-
-                print(f'{Color.greenl}[State]{Color.reset}', label_dict['name'], end=': ')
-
-                state = scene = False
-                if os.path.exists(os.path.join(Args.Dirs.scene, save_file)):
-                    scene = True
-                # if os.path.exists(os.path.join(Args.Dirs.image, save_file)):
-                state = True
-
-                with open(label_file, 'w') as f:
-                    label_dict['state'] = state # 改变状态
-                    label_dict['scene'] = scene # 改变状态
-                    json.dump(label_dict, f, indent=4, ensure_ascii=False)
-
-    finally:
-        print('destroying actors')
-        if camera_actor:
-            camera_actor.destroy()
-        print('destroy actors: ', len(actor_list))
-        client.apply_batch([carla.command.DestroyActor(x) for x in actor_list])
 
 
 class Settings:

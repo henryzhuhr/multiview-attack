@@ -23,16 +23,12 @@ logt = lambda: "\033[01;32m{%d}\033[0m" % datetime.datetime.now().strftime("%Y-%
 
 def get_args():
     parser = argparse.ArgumentParser()
-
-    parser.add_argument('--save_dir', type=str, default='stylegan2')
-    parser.add_argument("--epochs", type=int, default=20000)
-    parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--num_workers", type=int, default=8)
 
-    parser.add_argument("--mix_prob", type=float, default=0.9, help="probability of latent code mixing")
+    parser.add_argument("--mix_prob", type=float, default=0.9)
     parser.add_argument("--lr", type=float, default=0.002)
 
-    parser.add_argument('--pretrained', type=str, default="tmp/attack_l1-05172128/checkpoint/gan-398.pt")
+    parser.add_argument('--pretrained', type=str, default="tmp/attack-两类-05200909/checkpoint/gan-299.pt")
 
     args = parser.parse_args()
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -42,9 +38,6 @@ def get_args():
 
 class ArgsType:
     device: str
-    save_dir: str
-    epochs: int
-    batch: int
     num_workers: int
     size: int
 
@@ -80,7 +73,7 @@ def main():
     os.makedirs(base_save_dir, exist_ok=True)
 
     device = args.device
-    data_set = CarlaDataset(carla_root="tmp/data", categories=cats)
+    data_set = CarlaDataset(carla_root="tmp/data-Town01", categories=cats,is_train=False)
     num_classes = len(data_set.coco_ic_map)
 
     # --- Load Neural Renderer ---
@@ -121,6 +114,7 @@ def main():
 
     pbar = tqdm.tqdm(data_set)
     for i_d, item in enumerate(pbar):
+        pbar.set_description(f"[{i_d}] {item['file']}")
         image = item["image"].to(device)
         r_p = {"ct": item["ct"], "vt": item["vt"], "fov": item["fov"]}
 
@@ -130,6 +124,7 @@ def main():
 
             image_list = []
             for adv_type, x_ in {
+                "org": x_t,
                 "clean": x_t,
                 "noise": x_n,
                 "adv": x_i,
@@ -143,6 +138,7 @@ def main():
 
                 atk_class = data_set.coco_ic_map[int(label.item())]
                 # cv2.putText(render_img, f"Attack:{atk_class}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                detect_img = render_img.copy()
                 if len(pred_results):
                     for *xyxy, conf, cls in pred_results:
                         pclass = data_set.coco_ic_map[int(cls)]
@@ -154,21 +150,29 @@ def main():
                             color = COLOR_MAP[0]
                         else:
                             color = (255, 255, 255)
-                        cv2.rectangle(render_img, (x1, y1), (x2, y2), color, 2)
-                        cv2.putText(render_img, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-                image_list.append(render_img)
+                        cv2.rectangle(detect_img, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(detect_img, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+                if adv_type == "org":
+                    image_list.append(render_img)
+                else:
+                    image_list.append(detect_img)
             cat_render_img = cv2.vconcat(image_list)
             class_concat_imgs.append(cat_render_img)
 
-            os.makedirs(ic_save_dir := f"{base_save_dir}/index", exist_ok=True)       # index-class
-            os.makedirs(ci_save_dir := f"{base_save_dir}/class", exist_ok=True)       # class-index
-            os.makedirs(cc_save_dir := f"{base_save_dir}/{atk_class}", exist_ok=True) # class
-
+            os.makedirs(ic_save_dir := f"{base_save_dir}/index", exist_ok=True) # index-class
             cv2.imwrite(f"{ic_save_dir}/{i_d}-{atk_class}.png", cat_render_img)
+
+            os.makedirs(ci_save_dir := f"{base_save_dir}/class", exist_ok=True) # class-index
             cv2.imwrite(f"{ci_save_dir}/{atk_class}-{i_d}.png", cat_render_img)
+
+            os.makedirs(cc_save_dir := f"{base_save_dir}/{atk_class}", exist_ok=True) # class
             cv2.imwrite(f"{cc_save_dir}/{i_d}.png", cat_render_img)
 
-        concat_img= cv2.hconcat(class_concat_imgs)
+            os.makedirs(single_save_dir := f"{base_save_dir}/single", exist_ok=True) # class
+            for i_img, img in enumerate(image_list):
+                cv2.imwrite(f"{single_save_dir}/{i_d}-{atk_class}-{i_img}.png", img)
+
+        concat_img = cv2.hconcat(class_concat_imgs)
         os.makedirs(aa_save_dir := f"{base_save_dir}/concat", exist_ok=True) # class
         cv2.imwrite(f"{aa_save_dir}/{i_d}.png", concat_img)
         cv2.imwrite("tmp/__eval__.png", concat_img)
