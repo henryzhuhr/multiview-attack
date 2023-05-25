@@ -12,53 +12,27 @@ export OMP_NUM_THREADS=8
 
 export CUDA_VISIBLE_DEVICES=0
 
-# python train-tgan.py  \
+# python train-pacg.py  \
 #     --save_dir train \
-#     --obj_model assets/vehicle.obj \
-#     --selected_faces assets/faces-std.txt \
-#     --pretrained tmp/autoencoder/ae-std.pt \
+#     --obj_model assets/audi.obj \
+#     --selected_faces assets/faces-audi-std.txt \
+#     --pretrained pretrained/ae-audi-std-6000.pt \
 #     --categories "dog" \
-#     --batch 8 --epochs 200 --lr 0.1 --milestones 150
+#     --batch 8 --epochs 100 --lr 0.1 --milestones 150
     
-python train-tgan.py  \
-    --save_dir train \
-    --obj_model assets/vehicle.obj \
-    --selected_faces assets/faces-std.txt \
-    --pretrained tmp/autoencoder/ae-std.pt \
-    --categories "person" \
-    --batch 8 --epochs 100 --lr 0.1 --milestones 100
-
-
-python train-tgan.py  \
-    --save_dir train \
-    --obj_model assets/vehicle.obj \
-    --selected_faces assets/faces-std.txt \
-    --pretrained tmp/autoencoder/ae-std.pt \
-    --categories "fork" \
-    --batch 8 --epochs 150 --lr 0.1 --milestones 150
-
-
-# python train-tgan.py  \
+# python train-pacg.py  \
 #     --save_dir train \
-#     --obj_model assets/vehicle.obj \
-#     --selected_faces assets/faces-std.txt \
-#     --pretrained tmp/autoencoder/ae-std.pt \
-#     --categories "dog" \
-#     --batch 8 --epochs 200 --lr 0.1 --milestones 150
+#     --obj_model assets/audi.obj \
+#     --selected_faces assets/faces-audi-std.txt \
+#     --pretrained pretrained/ae-audi-std-6000.pt \
+#     --categories "dog" "person" \
+#     --batch 8 --epochs 100 --lr 0.1 --milestones 100
 
-# python train-tgan.py  \
-#     --save_dir attack-bowl \
-#     --obj_model assets/vehicle.obj \
-#     --selected_faces assets/faces-std.txt \
-#     --pretrained tmp/autoencoder/ae-std.pt \
-#     --categories "dog" "apple" \
-#     --batch 8 --epochs 300 --lr 0.1 --milestones 100 150
-
-# python train-tgan.py  \
-#     --save_dir attack_l1 \
-#     --obj_model assets/vehicle.obj \
-#     --selected_faces assets/faces-less.txt \
-#     --pretrained tmp/autoencoder/ae-less.pt \
-#     --categories "dog" "bowl" "apple" "airplane" \
-#     --batch 8 --epochs 400 --lr 0.1 --milestones 200 300
+python train-pacg.py  \
+    --save_dir train \
+    --obj_model assets/audi.obj \
+    --selected_faces assets/faces-audi-std.txt \
+    --pretrained pretrained/ae-audi-std-6000.pt \
+    --categories "dog" "bowl" "apple" "airplane" \
+    --batch 8 --epochs 300 --lr 0.1 --milestones 200 300
 

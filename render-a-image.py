@@ -54,8 +54,6 @@ def main():
     neural_renderer = NeuralRenderer(
         args.obj_model, selected_faces=selected_faces, texture_size=ts, image_size=800, device=args.device
     )
-    neural_renderer.to(neural_renderer.textures.device)
-    neural_renderer.renderer.to(neural_renderer.textures.device)
     neural_renderer.set_render_perspective(camera_transform, vehicle_transform, fov)
 
     x_t = neural_renderer.textures[:, selected_faces, :]

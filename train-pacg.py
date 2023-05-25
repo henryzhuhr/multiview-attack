@@ -39,7 +39,7 @@ conf_thres, iou_thres = 0.25, 0.6
 def get_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--save_dir', type=str, default='stylegan2')
+    parser.add_argument('--save_dir', type=str, default='pacg')
     parser.add_argument("--epochs", type=int, default=20000)
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--num_workers", type=int, default=8)
@@ -89,7 +89,7 @@ def prepare_training(args: ArgsType):
     # ----------------------------------------------
     #   Load Data
     # ----------------------------------------------
-    train_set = CarlaDataset(carla_root="tmp/data", categories=args.categories)
+    train_set = CarlaDataset(carla_root="temp/data-maps/Town10HD", categories=args.categories)
     train_loader = data.DataLoader(
         train_set,
         batch_size=args.batch,
@@ -143,7 +143,7 @@ def prepare_training(args: ArgsType):
 def train():
     args = get_args()
     nowt = datetime.datetime.now().strftime("%m%d%H%M")
-    args.save_dir = os.path.join("tmp", f"{args.save_dir}-{nowt}")
+    args.save_dir = os.path.join("tmp","train", f"{args.save_dir}-{'_'.join(args.categories)}-{nowt}")
 
     os.makedirs(sample_save_dir := os.path.join(args.save_dir, "sample"), exist_ok=True)
     os.makedirs(checkpoint_save_dir := os.path.join(args.save_dir, "checkpoint"), exist_ok=True)

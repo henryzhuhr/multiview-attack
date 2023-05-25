@@ -18,3 +18,8 @@ python3 setup.py install
 ```bash
 python3 train-AE.py
 ```
+
+# 测试流程
+
+1. `run.sh` 训练完成后，训练结果保存在 `tmp/train`。在 `tmp/train/train-<NAMME>/checkpoint/_generator.pt` 有权重
+2. 

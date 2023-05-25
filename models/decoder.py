@@ -56,7 +56,7 @@ class TextureDecoder(nn.Module):
 
         x = self.conv_out(x)
         x = self.feat_out(x)
-        x = (F.tanh(x) + 1) / 2
+        x = (torch.tanh(x) + 1) / 2
         x = x.view(bs, nt, ts, ts, ts, 3)
         return x
 

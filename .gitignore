@@ -34,3 +34,5 @@ MANIFEST
 *.so
 tmp
 temp
+tmps
+pretrained

@@ -23,6 +23,25 @@ cstri = lambda s: f"\033[01;32m{s}\033[0m"
 cstrs = lambda s: f"\033[01;36m{s}\033[0m"
 cstrw = lambda s: f"\033[01;33m{s}\033[0m"
 
+# RGB - BGR : https://www.sojson.com/rgb.html
+COLOR_MAP = {
+    "car": (0, 255, 0),               # Green
+                                        # --- Attack ---
+    "dog": (0, 245, 255),             # Turquoise1
+    "apple": (150, 62, 255),          # VioletRed
+    "bowl": (154, 250, 0),            # MedSpringGreen
+    "A": (255, 191, 0),               # DeepSkyBlue
+    "B": (0, 69, 255),                # OrangeRed
+    "C": (137, 18, 238),              # DeepPink
+                                        # --- traffic ---
+    "truck": (255, 255, 0),           # Cyan
+    "bus": (255, 0, 255),             # Purple
+    "motorcycle": (0, 255, 255),      # Yellow
+    "bicycle": (255, 0, 0),           # Red
+    "person": (0, 0, 255),            # Blue
+    "traffic light": (185, 174, 255), # Black
+}
+
 
 class CarlaDatasetDir:
     def __init__(self, root, data_type: str = None) -> None:
@@ -33,6 +52,10 @@ class CarlaDatasetDir:
 
 
 class CarlaDataset(data.Dataset):
+    coco_ic_map = {idx: cn for idx, cn in enumerate(COCO_CATEGORIES_MAP.values())} # {"index":class_name}
+    coco_ci_map = {cn: idx for idx, cn in enumerate(COCO_CATEGORIES_MAP.values())} # {"class_name":index}
+    color_map = {cn: COLOR_MAP[cn] if cn in COLOR_MAP else (0, 0, 0) for cn in COCO_CATEGORIES_MAP.values()}
+
     def __init__(self, carla_root: str, categories: Union[str, List[str]], is_train=True):
 
         carla_label_list = []
@@ -44,21 +67,17 @@ class CarlaDataset(data.Dataset):
                 if os.path.exists(corresponding_image_file):
                     carla_label_list.append(label)
 
-        coco_category_index = {cn: idx for idx, cn in enumerate(COCO_CATEGORIES_MAP.values())}
-        coco_index_category = {idx: cn for idx, cn in enumerate(COCO_CATEGORIES_MAP.values())}
         if isinstance(categories, str):
-            categories_list = [coco_category_index[categories]]
+            categories_list = [self.coco_ic_map[categories]]
         elif isinstance(categories, list):
-            categories_list = [coco_category_index[c] for c in categories]
+            categories_list = [self.coco_ci_map[c] for c in categories]
         else:
             raise TypeError
 
         self.carla_dir = carla_dir
-        self.carla_label_list = carla_label_list[: 10]
+        self.carla_label_list = carla_label_list
         self.is_train = is_train
         self.categories_list = categories_list
-        self.coco_ic_map = coco_index_category # {"class_name":index}
-        self.coco_ci_map = coco_category_index # {"index":class_name}
 
     def __len__(self):
         max_data = 256

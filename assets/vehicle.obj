@@ -1,6 +1,6 @@
 # Blender 3.3.1
 # www.blender.org
-mtllib vehicle-YZ.mtl
+mtllib vehicle.mtl
 o SM_BodyWork
 v 3.648710 0.193670 0.617480
 v 3.648710 0.209485 0.621453

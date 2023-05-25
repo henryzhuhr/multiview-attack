@@ -47,7 +47,7 @@ def get_args():
 
     parser.add_argument('--epoches', type=int, default=10000)
     parser.add_argument('--lr', type=float, default=0.1)
-    parser.add_argument('--milestones', type=List[int], default=[8000, 60000])
+    parser.add_argument('--milestones', type=List[int], default=[5000, 10000])
     parser.add_argument('--device', type=str, default='cuda')
 
     parser.add_argument('--save_interval', type=int, default=1000)
@@ -155,8 +155,8 @@ def main():
 
 
 def render_a_image(neural_renderer: NeuralRenderer, image: cv2.Mat, x: Tensor):
-    x_full = torch.zeros_like(neural_renderer.textures)
-    # x_full = neural_renderer.textures
+    # x_full = torch.zeros_like(neural_renderer.textures)
+    x_full = neural_renderer.textures
     x_full[:, neural_renderer.selected_faces, :] = x
 
     rgb_images, _, alpha_images = neural_renderer.renderer.forward(
