@@ -70,7 +70,10 @@ class CarlaDataset(data.Dataset):
         if isinstance(categories, str):
             categories_list = [self.coco_ic_map[categories]]
         elif isinstance(categories, list):
-            categories_list = [self.coco_ci_map[c] for c in categories]
+            if len(categories) == 0:
+                categories_list = list(self.coco_ci_map.values())
+            else:
+                categories_list = [self.coco_ci_map[c] for c in categories]
         else:
             raise TypeError
 
