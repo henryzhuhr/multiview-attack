@@ -34,12 +34,12 @@ COLOR_MAP = {
     "B": (0, 69, 255),                # OrangeRed
     "C": (137, 18, 238),              # DeepPink
                                         # --- traffic ---
-    "truck": (255, 255, 0),           # Cyan
-    "bus": (255, 0, 255),             # Purple
-    "motorcycle": (0, 255, 255),      # Yellow
-    "bicycle": (255, 0, 0),           # Red
-    "person": (0, 0, 255),            # Blue
-    "traffic light": (185, 174, 255), # Black
+    # "truck": (255, 255, 0),           # Cyan
+    # "bus": (255, 0, 255),             # Purple
+    # "motorcycle": (0, 255, 255),      # Yellow
+    # "bicycle": (255, 0, 0),           # Red
+    # "person": (0, 0, 255),            # Blue
+    # "traffic light": (185, 174, 255), # Black
 }
 
 
@@ -83,11 +83,12 @@ class CarlaDataset(data.Dataset):
         self.categories_list = categories_list
 
     def __len__(self):
-        max_data = 256
-        if (self.is_train) and (self.carla_label_list.__len__() > max_data):
-            return max_data
-        else:
-            return self.carla_label_list.__len__()
+        # max_data = 256
+        # if (self.is_train) and (self.carla_label_list.__len__() > max_data):
+        #     return max_data
+        # else:
+        #     return self.carla_label_list.__len__()
+        return self.carla_label_list.__len__()
 
     def __getitem__(self, index: int):
         # carla

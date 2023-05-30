@@ -20,8 +20,8 @@ from models.gan import TextureGenerator
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--obj_model', type=str, default='assets/audi_et_te.obj')
-    parser.add_argument('--selected_faces', type=str, default='assets/faces-std.txt')
+    parser.add_argument('--obj_model', type=str, default='assets/Mini.obj')
+    parser.add_argument('--selected_faces', type=str, default='assets/faces-audi-std.txt')
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
     parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
@@ -52,11 +52,11 @@ def main():
     with open(args.selected_faces, "r") as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     neural_renderer = NeuralRenderer(
-        args.obj_model, selected_faces=selected_faces, texture_size=ts, image_size=800, device=args.device
+        args.obj_model, selected_faces=None, texture_size=ts, image_size=800, device=args.device
     )
     neural_renderer.set_render_perspective(camera_transform, vehicle_transform, fov)
 
-    x_t = neural_renderer.textures[:, selected_faces, :]
+    x_t = neural_renderer.textures#[:, selected_faces, :]
     img=render_a_image(neural_renderer, image, x_t)
     cv2.imwrite("images/test.png", img)
 
@@ -64,7 +64,7 @@ def main():
 def render_a_image(neural_renderer: NeuralRenderer, image: cv2.Mat, x: Tensor):
     # x_full = torch.zeros_like(neural_renderer.textures)
     x_full = neural_renderer.textures
-    x_full[:, neural_renderer.selected_faces, :] = x
+    # x_full[:, neural_renderer.selected_faces, :] = x
 
     rgb_images, _, alpha_images = neural_renderer.renderer.forward(
         neural_renderer.vertices, neural_renderer.faces, torch.tanh(x_full)

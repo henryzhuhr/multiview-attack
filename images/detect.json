@@ -1,0 +1,20 @@
+{
+    "name": "Town10HD-point_0001-distance_000-direction_1",
+    "imgs": {
+        "clean": "Town10HD-point_0001-distance_000-direction_1-clean.png",
+        "noise": "Town10HD-point_0001-distance_000-direction_1-noise.png",
+        "pacg-dog": "Town10HD-point_0001-distance_000-direction_1-pacg-dog.png",
+        "DAS": "Town10HD-point_0001-distance_000-direction_1-DAS.png",
+        "FCA": "Town10HD-point_0001-distance_000-direction_1-FCA.png"
+    },
+    "bbox": [
+        0.34875,
+        0.37625,
+        0.715,
+        0.61125
+    ],
+    "size": [
+        800,
+        800
+    ]
+}

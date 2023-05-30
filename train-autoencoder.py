@@ -40,7 +40,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_model', type=str, default='assets/vehicle.obj')
     parser.add_argument('--selected_faces', type=str, default='assets/faces-std.txt')
-    parser.add_argument('--texture_size', type=int, default=4)
+    parser.add_argument('--texture_size', type=int, default=6)
     parser.add_argument('--latent_dim', type=int, default=1024)
     parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
     parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
@@ -51,7 +51,7 @@ def get_args():
     parser.add_argument('--device', type=str, default='cuda')
 
     parser.add_argument('--save_interval', type=int, default=1000)
-    parser.add_argument('--save_dir', type=str, default='tmp/tests')
+    parser.add_argument('--save_dir', type=str, default='tmp/AE')
     parser.add_argument('--save_name', type=str, default='autoencoder')
 
     parser.add_argument('--pretained', type=str, default=None)

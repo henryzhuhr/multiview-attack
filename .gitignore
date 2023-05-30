@@ -35,4 +35,7 @@ MANIFEST
 tmp
 temp
 tmps
+test
+tests
 pretrained
+data/

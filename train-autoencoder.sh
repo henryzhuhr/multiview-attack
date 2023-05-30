@@ -4,6 +4,13 @@ echo -e "\n\033[01;36m[ENV]$(which python) \033[0m\n"
 
 # python -m pip install requirements.txt
 
+
+python train-autoencoder.py \
+    --obj_model assets/audi.obj \
+    --latent_dim 1024 \
+    --selected_faces assets/FCA-faces.txt \
+    --save_name ae-audi-full
+
 # "audi" 
 for model_name in "vehicle"
 do

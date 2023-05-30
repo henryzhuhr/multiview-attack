@@ -110,7 +110,6 @@ def main():
     conf_thres, iou_thres = 0.25, 0.6
 
     n_r = 0.1      # noise ratio
-
     x_t = (neural_renderer.textures[:, neural_renderer.selected_faces, :]).clone() # x_{texture}
     x_n = torch.rand_like(x_t)
     x_i = (1 - n_r) * x_t + n_r * x_n                                              # x_{texture with noise}
@@ -145,7 +144,7 @@ def main():
                 atk_class = data_set.coco_ic_map[int(label.item())]
                 detect_img = render_img.copy()
                 bboxes = []
-                w, h = detect_img.shape[: 2]
+                h,w = detect_img.shape[: 2]
                 if len(pred_results):
                     for *xyxy, conf, category in pred_results:
                         pclass = data_set.coco_ic_map[int(category)]

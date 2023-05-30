@@ -123,7 +123,6 @@ def main():
 
 
 def render(neural_renderer: NeuralRenderer, base_image: torch.Tensor, render_params: dict):
-
     neural_renderer.set_render_perspective(render_params["ct"], render_params["vt"], render_params["fov"])
     rgb_image, _, alpha_image = neural_renderer.forward(torch.tanh(neural_renderer.textures))
     render_image = alpha_image * rgb_image + (1 - alpha_image) * base_image

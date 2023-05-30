@@ -89,7 +89,7 @@ def prepare_training(args: ArgsType):
     # ----------------------------------------------
     #   Load Data
     # ----------------------------------------------
-    train_set = CarlaDataset(carla_root="temp/data-maps/Town10HD", categories=args.categories)
+    train_set = CarlaDataset(carla_root="data/train/Town01", categories=args.categories)
     train_loader = data.DataLoader(
         train_set,
         batch_size=args.batch,
