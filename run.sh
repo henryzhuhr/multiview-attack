@@ -12,16 +12,16 @@ export OMP_NUM_THREADS=8
 
 export CUDA_VISIBLE_DEVICES=0
 
-for cls in "dog" "kite" "skateboard"
-do
-    python train-pacg.py \
-        --save_dir train_std \
-        --obj_model assets/audi.obj \
-        --selected_faces assets/faces-audi-std.txt \
-        --pretrained pretrained/ae-audi-std-6000.pt \
-        --categories $cls \
-        --batch 8 --epochs 200 --lr 0.1 --milestones 150
-done
+# for cls in "skateboard" # "dog" "kite" 
+# do
+#     python train-pacg.py \
+#         --save_dir train_std \
+#         --obj_model assets/audi.obj \
+#         --selected_faces assets/faces-audi-std.txt \
+#         --pretrained pretrained/ae-audi-std-6000.pt \
+#         --categories $cls \
+#         --batch 8 --epochs 200 --lr 0.1 --milestones 150
+# done
 
 python train-pacg.py \
     --save_dir train_std \
@@ -46,7 +46,7 @@ python train-pacg.py \
     --selected_faces assets/faces-audi-std.txt \
     --pretrained pretrained/ae-audi-std-6000.pt \
     --categories "dog" "kite" "skateboard" \
-    --batch 8 --epochs 400 --lr 0.1 --milestones 250 
+    --batch 8 --epochs 300 --lr 0.1 --milestones 250 
 
 
 

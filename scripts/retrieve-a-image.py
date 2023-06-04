@@ -12,7 +12,7 @@ import numpy as np
 import carla
 
 sys.path.append(os.getcwd())
-from tsgan import types
+from models.data import types
 
 
 class Settings:
@@ -20,28 +20,15 @@ class Settings:
     data_root = "tmp/data"
     world_map = "Town10HD"
 
-    # [x,y,z,fov]
     camera_distances = [
-                         # [3, 2, 2, 100],
-                         # [3, 2, 2, 00],
-                         # [3, 2, 3, 90],
-                         # [4, 2.5, 2, 90],
-                         # [4, 2.5, 3, 90],
-        [4, 2.5, 4, 90],
-                         # [10, 6, 3, 90],
-        [8, 6, 3, 90],
-                         # [12, 8, 7, 70],
-        [12, 8, 5, 90],
-                         # [15, 10, 10, 60],
-                         # [15, 10, 5, 90],
-
-        [5, 4, 2, 90],
-        [5, 5, 2.5, 90],
-        [6, 4, 3, 90], 
-        [7, 4, 2, 90],
+        [4, 0, 1.5, 90],
+        [-4, 0, 1.5, 90],
+        [0, 4, 1.5, 90],
+        [0, -4, 1.5, 90],
     ]
-
-    camera_distance = [5, 0, 2, 90]
+    # [x,y,z,fov]
+    # camera_distance = [-4, 0, 1, 90]
+    camera_distance = camera_distances[2]
 
 
 def main():
@@ -90,7 +77,7 @@ def main():
         rgb_camera_actor: types.carla.Actor = world.spawn_actor(
             camera_bp, camera_transform, attach_to=vehicle_actor, attachment_type=carla.AttachmentType.Rigid
         )
-        
+
         if False:
             time.sleep(1)
             camera_abs_transform = rgb_camera_actor.get_transform()
@@ -99,7 +86,51 @@ def main():
             time.sleep(1)
         actor_list.append(rgb_camera_actor)
 
-        rgb_camera_actor.listen(lambda image: save_img(image, [800, 800], "tmp/rgb.png"))
+        save_name = f"image~{x}_{y}_{z}_{fov}"
+        save_dir = "data/samples"
+        os.makedirs(save_dir, exist_ok=True)
+        with open(f'{save_dir}/{save_name}.json', 'w') as f_label:
+            json.dump(
+                {
+                    "name": save_name,
+                    "map": world_map,
+                    "vehicle":
+                        {
+                            "location":
+                                {
+                                    "x": vehicle_transform.location.x,
+                                    "y": vehicle_transform.location.y,
+                                    "z": vehicle_transform.location.z,
+                                },
+                            "rotation":
+                                {
+                                    "pitch": vehicle_transform.rotation.pitch,
+                                    "yaw": vehicle_transform.rotation.yaw,
+                                    "roll": vehicle_transform.rotation.roll,
+                                }
+                        },
+                    "camera":
+                        {
+                            "location":
+                                {
+                                    "x": camera_transform.location.x,
+                                    "y": camera_transform.location.y,
+                                    "z": camera_transform.location.z,
+                                },
+                            "rotation":
+                                {
+                                    "pitch": camera_transform.rotation.pitch,
+                                    "yaw": camera_transform.rotation.yaw,
+                                    "roll": camera_transform.rotation.roll,
+                                },
+                            "fov": fov
+                        },
+                },
+                f_label,
+                indent=4,
+                ensure_ascii=False
+            )
+        rgb_camera_actor.listen(lambda image: save_img(image, [800, 800], f"{save_dir}/{save_name}.png"))
 
         time.sleep(1.2)
         rgb_camera_actor.stop()

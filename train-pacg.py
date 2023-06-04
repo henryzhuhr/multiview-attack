@@ -250,7 +250,7 @@ def train():
 
                 loss_adv = lbox + lobj + lcls # + loss_smooth
 
-                ladv_epoch += (lbox + lobj + lcls).item() * bs + loss_smooth * bs
+                ladv_epoch += (lbox + lobj + lcls).item() * bs # + loss_smooth * bs
 
                 optimizer.zero_grad()
                 loss_adv.backward()

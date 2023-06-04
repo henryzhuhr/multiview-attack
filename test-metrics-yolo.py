@@ -28,8 +28,8 @@ model_list = ["yolo", "frcnn"]
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default="tmp/test/Town01-0529_0938")
-    parser.add_argument('--model', type=str, default=model_list[1], choices=model_list)
+    parser.add_argument('--data_dir', type=str, default="tmp/test/Town01-dog_kite_skateboard-0602_0945")
+    parser.add_argument('--model', type=str, default=model_list[0], choices=model_list)
     parser.add_argument('--device', type=str, default="cuda:1")
     args = parser.parse_args()
 

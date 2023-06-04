@@ -40,7 +40,8 @@ def get_args():
     parser.add_argument('--world_map', type=str, default="Town01")
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--device', type=str, default='cuda:0')
-    parser.add_argument('--pretrained', type=str, default="tmp/train/train_full-dog-05272016/checkpoint/_generator.pt")
+    parser.add_argument('--pretrained', type=str, default="tmp/train/train_std-kite-05300053/checkpoint/_generator.pt")
+    parser.add_argument('--name', type=str)
     parser.add_argument('--nowt', type=str)
     return parser.parse_args()
 
@@ -53,7 +54,10 @@ def main():
         nowt = args.nowt
     else:
         nowt = datetime.datetime.now().strftime("%m%d_%H%M")
-    os.makedirs(save_dir := f"tmp/test/{args.world_map}-{nowt}", exist_ok=True)
+    if args.name:
+        os.makedirs(save_dir := f"tmp/test/{args.world_map}-{nowt}-{args.name}", exist_ok=True)
+    else:
+        os.makedirs(save_dir := f"tmp/test/{args.world_map}-{nowt}", exist_ok=True)
 
     pretrained = torch.load(args.pretrained, map_location='cpu')
     pargs = vars(pretrained["args"]) # pretrained args
@@ -91,8 +95,8 @@ def main():
 
 
     # --- DAS ---    
-    with open("assets/DAS-faces.txt", 'r') as f:
-    # with open(pargs["selected_faces"], 'r') as f:
+    # with open("assets/DAS-faces.txt", 'r') as f:
+    with open(pargs["selected_faces"], 'r') as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     nr_DAS = NeuralRenderer(
         obj_model,
@@ -111,8 +115,8 @@ def main():
     DAS_texture_mask = torch.from_numpy(DAS_texture_mask).to(device).unsqueeze(0)
     
     # --- FCA ---    
-    with open("assets/FCA-faces.txt", 'r') as f:
-    # with open(pargs["selected_faces"], 'r') as f:
+    # with open("assets/FCA-faces.txt", 'r') as f:
+    with open(pargs["selected_faces"], 'r') as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     nr_FCA = NeuralRenderer(
         obj_model,
