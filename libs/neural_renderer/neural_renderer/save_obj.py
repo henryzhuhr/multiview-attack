@@ -7,7 +7,7 @@ from skimage.io import imsave
 import neural_renderer.cuda.create_texture_image as create_texture_image_cuda
 
 
-def create_texture_image(textures, texture_size_out=16):
+def create_texture_image(textures, texture_size_out=4):
     num_faces, texture_size_in = textures.shape[:2]
     tile_width = int((num_faces - 1.) ** 0.5) + 1
     tile_height = int((num_faces - 1.) / tile_width) + 1
@@ -15,7 +15,8 @@ def create_texture_image(textures, texture_size_out=16):
     vertices = torch.zeros((num_faces, 3, 2), dtype=torch.float32)  # [:, :, XY]
     face_nums = torch.arange(num_faces)
     column = face_nums % tile_width
-    row = face_nums / tile_width
+    # row = face_nums / tile_width
+    row =torch.div(face_nums, tile_width, rounding_mode='floor')
     vertices[:, 0, 0] = column * texture_size_out
     vertices[:, 0, 1] = row * texture_size_out
     vertices[:, 1, 0] = column * texture_size_out
