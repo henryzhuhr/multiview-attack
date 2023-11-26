@@ -19,15 +19,15 @@ is_eval = True     # 是否保存场景图
 
 class Settings:
     world_map = "Town10HD"
-    data_root = "data/eval"
+    data_root = "data/"
     maps = [
-        'Town01',
-        'Town02',
-        'Town03',
-        'Town04',
-        'Town06',
-        'Town07',
-        'Town05',
+        # 'Town01',
+        # 'Town02',
+        # 'Town03',
+        # 'Town04',
+        # 'Town06',
+        # 'Town07',
+        # 'Town05',
         'Town10HD',
                     # 'Town11',
     ]
@@ -35,7 +35,9 @@ class Settings:
     # [x,y,z,fov]
     train_camera_distances = [ # train
         [5, 2, 90],
-        [8, 3, 90],
+        [6, 3, 90],
+        [7, 4, 90],
+        [8, 5, 90],
     ]
     eval_camera_distances = [  # eval
         [5, 2, 90],
@@ -43,7 +45,7 @@ class Settings:
         [12, 4, 90],
         [16, 5, 90],
     ]
-    camera_distances = eval_camera_distances if is_eval else train_camera_distances
+    camera_distances = train_camera_distances
 
 
 def generate_plan(world_map: str, data_root: str):
@@ -68,13 +70,14 @@ def generate_plan(world_map: str, data_root: str):
         # 获取全部出生点 Get all recommended spawn points
         spawn_points: List[types.carla.Transform] = world.get_map().get_spawn_points()
 
+
         # 遍历全部出生点
         data_list = []
         for spawn_point_index, spawn_point in enumerate(spawn_points):
             vehicle_transform: types.carla.Transform = spawn_point
 
             # 遍历相机距离
-            for distance_index, (d, z, fov) in enumerate(random.sample(Settings.camera_distances, 2)):
+            for distance_index, (d, z, fov) in enumerate(Settings.camera_distances):
                 # 遍历相机方位
                 for direction_index, (x, y) in enumerate(Utils.expand_coordinates(d)):
                     save_name = "%s-point_%04d-distance_%03d-direction_%d" % (
@@ -89,7 +92,7 @@ def generate_plan(world_map: str, data_root: str):
                     data_list.append([save_name, world_map, vehicle_transform, camera_transform, fov])
 
         random.shuffle(data_list)
-        data_list = random.sample(data_list, 500)
+        # data_list = random.sample(data_list, 500)
         for [save_name, world_map, vehicle_transform, camera_transform, fov] in data_list:
             with open(os.path.join(label_save_dir, f'{save_name}.json'), 'w') as f_label:
                 json.dump(

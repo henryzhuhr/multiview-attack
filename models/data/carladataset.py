@@ -24,22 +24,22 @@ cstrs = lambda s: f"\033[01;36m{s}\033[0m"
 cstrw = lambda s: f"\033[01;33m{s}\033[0m"
 
 # RGB - BGR : https://www.sojson.com/rgb.html
-COLOR_MAP = {
-    "car": (0, 255, 0),               # Green
+COLOR_MAP = {#
+    "car": (0, 205, 0),               # Green
                                         # --- Attack ---
     "dog": (0, 245, 255),             # Turquoise1
-    "apple": (150, 62, 255),          # VioletRed
-    "bowl": (154, 250, 0),            # MedSpringGreen
-    "A": (255, 191, 0),               # DeepSkyBlue
-    "B": (0, 69, 255),                # OrangeRed
-    "C": (137, 18, 238),              # DeepPink
+    "kite": (150, 62, 255),          # VioletRed
+    "skateboard": (154, 250, 0),            # MedSpringGreen
+    "kite": (255, 191, 0),               # DeepSkyBlue
+    "airplane": (0, 69, 255),                # OrangeRed
+    "truck": (137, 18, 238),              # DeepPink
                                         # --- traffic ---
     # "truck": (255, 255, 0),           # Cyan
-    # "bus": (255, 0, 255),             # Purple
-    # "motorcycle": (0, 255, 255),      # Yellow
-    # "bicycle": (255, 0, 0),           # Red
-    # "person": (0, 0, 255),            # Blue
-    # "traffic light": (185, 174, 255), # Black
+    "bus": (255, 0, 255),             # Purple
+    "motorcycle": (0, 255, 255),      # Yellow
+    "bicycle": (255, 0, 0),           # Red
+    "person": (182, 31, 147),            # Blue
+    "traffic light": (185, 174, 255), # Black
 }
 
 
@@ -60,6 +60,7 @@ class CarlaDataset(data.Dataset):
 
         carla_label_list = []
         carla_dir = CarlaDatasetDir(carla_root)
+        # for i_f, file in enumerate(os.listdir(carla_dir.labels_dir)[:500]):
         for i_f, file in enumerate(os.listdir(carla_dir.labels_dir)):
             if file.endswith(".json"):
                 label = CarlaDataset.load_carla_label(os.path.join(carla_dir.labels_dir, file))
@@ -83,15 +84,16 @@ class CarlaDataset(data.Dataset):
         self.categories_list = categories_list
 
     def __len__(self):
-        # max_data = 256
-        # if (self.is_train) and (self.carla_label_list.__len__() > max_data):
-        #     return max_data
-        # else:
-        #     return self.carla_label_list.__len__()
+        max_data = 512
+        if (self.is_train) and (self.carla_label_list.__len__() > max_data):
+            return max_data
+        else:
+            return self.carla_label_list.__len__()
         return self.carla_label_list.__len__()
 
     def __getitem__(self, index: int):
         # carla
+        item = self.carla_label_list[index]
         if self.is_train:
             item = random.choice(self.carla_label_list)
         else:

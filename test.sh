@@ -13,3 +13,11 @@ python test-render-img.py \
 
 python test-metrics-yolo.py \
     --data_dir "tmp/test/$world_map-$nowt"
+
+
+# 
+fcrackzip  -b -c '1' -l 4-11 "000.zip"
+
+
+
+

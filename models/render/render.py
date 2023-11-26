@@ -9,7 +9,15 @@ import neural_renderer
 
 
 class NeuralRenderer(nn.Module):
-    def __init__(self, obj_model, selected_faces: List[int] = None, texture_size=6, image_size=800, device="cuda"):
+    def __init__(
+        self,
+        obj_model,
+        selected_faces: List[int] = None,
+        texture_size=6,
+        image_size=800,
+        batch_size=1,
+        device="cuda",
+    ):
         super(NeuralRenderer, self).__init__()
 
         # 加载模型，返回 顶点, 面, 纹理
@@ -22,6 +30,7 @@ class NeuralRenderer(nn.Module):
             texture_size=texture_size, # 渲染纹理尺寸 越大渲染纹理精度越高
             load_texture=True,
         )
+
         self.register_buffer('vertices', vertices.unsqueeze(0))
         self.register_buffer('faces', faces.unsqueeze(0))
         self.register_buffer('textures', textures.unsqueeze(0))
@@ -32,13 +41,11 @@ class NeuralRenderer(nn.Module):
                 textures_mask[face_id, :, :, :, :] = True
         else:
             selected_faces = [int(face_id) for face_id in range(faces.shape[0])]
-            
             textures_mask = ~textures_mask
         self.textures_mask = textures_mask.int()
         # render_textures = textures * self.textures_mask
 
         self.selected_faces = selected_faces
-
 
         self.render_textures = nn.Parameter(textures.unsqueeze(0).clone()) # 待渲染的纹理 (优化参数)
 

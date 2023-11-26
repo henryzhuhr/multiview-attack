@@ -40,7 +40,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_model', type=str, default='assets/vehicle.obj')
     parser.add_argument('--selected_faces', type=str, default='assets/faces-std.txt')
-    parser.add_argument('--texture_size', type=int, default=6)
+    parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--latent_dim', type=int, default=1024)
     parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
     parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
@@ -90,7 +90,7 @@ def main():
 
     # Load Model
     model = TextureGenerator(
-        nt=nt,
+        nt=len(selected_faces),
         ts=args.texture_size,
         style_dim=args.latent_dim,
     ).cuda().train()

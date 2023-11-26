@@ -19,16 +19,99 @@ class Settings:
 
     data_root = "tmp/data"
     world_map = "Town10HD"
+    save_dir = "data/train/Test"
 
-    camera_distances = [
-        [4, 0, 1.5, 90],
-        [-4, 0, 1.5, 90],
-        [0, 4, 1.5, 90],
-        [0, -4, 1.5, 90],
-    ]
+    # camera_distances = [
+    #     # [4, 2, 3, 90],
+    #     # [5, 3, 3, 90],
+    #     # [6, 4, 3, 90],
+    #     # [5, 5, 3, 90],
+    #     # [4, -2, 3, 90],
+    #     # [5, -3, 3, 90],
+    #     # [6, -4, 3, 90],
+    #     # [5, -5, 3, 90],
+
+    #     # *([4, i, 3, 90] for i in [3,4,5]),
+    #     # *([4, -i, 3, 90] for i in [3,4,5]),
+    #     # *([0, i, 1.5, 90] for i in [4,5,6,7]),
+    #     # *([0, -i, 1.5, 90] for i in [4,5,6,7]),
+
+    # ]
+    # camera_distances = [
+    #     [0, 4, 1.5, 90],
+    #     [0, -4, 1.5, 90],
+    #     [0.1, 0, 3.5, 90],
+    #     [3, 0, 2, 90],
+    #     [2, 0, 3, 90],
+    # ]
     # [x,y,z,fov]
     # camera_distance = [-4, 0, 1, 90]
-    camera_distance = camera_distances[2]
+    camera_distance = [0, -6, 1.5, 90]
+
+    camera_distances = []
+
+
+get_save_name = lambda x, y, z, fov: f"Town10HD-{x}_{y}_{z}_{fov}"
+
+dz_list = [
+    [4, 3],
+    [5, 4],
+    [6, 5],
+]
+
+for d, z in dz_list:
+    cds = [
+        *[
+            [0, d, z, 90],
+            [0, -d, z, 90],
+            [d, 0, z, 90],
+            [-d, 0, z, 90],
+        ],
+        *[
+            [d, d, z, 90],
+            [d, -d, z, 90],
+            [d, d, z, 90],
+            [-d, d, z, 90],
+        ],
+        *[
+            [d, d / 2, z, 90],
+            [d, -d / 2, z, 90],
+            [d, d / 2, z, 90],
+            [-d, d / 2, z, 90],
+        ],
+        *[
+            [d / 2, d, z, 90],
+            [d / 2, -d, z, 90],
+            [d / 2, d, z, 90],
+            [-d / 2, d, z, 90],
+        ],
+        *[
+            [d / 4, d, z, 90],
+            [d / 4, -d, z, 90],
+            [d / 4, d, z, 90],
+            [-d / 4, d, z, 90],
+        ],
+        *[
+            [d, d / 4, z, 90],
+            [d, -d / 4, z, 90],
+            [d, d / 4, z, 90],
+            [-d, d / 4, z, 90],
+        ],
+    ]
+    for cd in cds:
+        Settings.camera_distances.append(cd)
+"""
+dir=data/train/Town
+mkdir -p $dir/images
+cp -r data/samples/*.png $dir/images
+mkdir -p $dir/labels
+cp -r data/samples/*.json $dir/labels
+"""
+print("distance: ", len(Settings.camera_distances))
+# for cd in cds:
+#     print(cd)
+
+# exit()
 
 
 def main():
@@ -36,6 +119,8 @@ def main():
     start_time = time.time()
     client = None
     actor_list = []
+    os.makedirs(images_save_dir := f'{Settings.save_dir}/images', exist_ok=True)
+    os.makedirs(labels_save_dir := f'{Settings.save_dir}/labels', exist_ok=True)
 
     try:
         client = carla.Client('localhost', 2000)
@@ -55,85 +140,84 @@ def main():
 
         # 随机选择一个出生点
         spawn_point = random.choice(spawn_points)
-        spawn_point = spawn_points[0]
+        spawn_point = spawn_points[1]
         vehicle_transform: types.carla.Transform = spawn_point
         vehicle_actor: types.carla.Actor = world.spawn_actor(vehicle_bp, vehicle_transform)
         # actor_list.append(vehicle_actor)
 
-        (x, y, z, fov) = Settings.camera_distance
+        for (x, y, z, fov) in Settings.camera_distances:
+            # (x, y, z, fov) = Settings.camera_distance
 
-        camera_bp = blueprint_library.find('sensor.camera.rgb')
-        camera_bp.set_attribute('image_size_x', str(800))
-        camera_bp.set_attribute('image_size_y', str(800))
-        camera_bp.set_attribute('sensor_tick', str(0.0))
-        camera_bp.set_attribute('shutter_speed', str(1500))
-        camera_bp.set_attribute('fov', str(fov))
+            camera_bp = blueprint_library.find('sensor.camera.rgb')
+            camera_bp.set_attribute('image_size_x', str(800))
+            camera_bp.set_attribute('image_size_y', str(800))
+            camera_bp.set_attribute('sensor_tick', str(0.0))
+            camera_bp.set_attribute('shutter_speed', str(1500))
+            camera_bp.set_attribute('fov', str(fov))
 
-        pitch, yaw, roll = get_rotation_by_center_actor(x, y, z)
-        camera_transform: types.carla.Transform = carla.Transform(
-            location=carla.Location(x, y, z), rotation=carla.Rotation(pitch, yaw, roll)
-        )
-
-        rgb_camera_actor: types.carla.Actor = world.spawn_actor(
-            camera_bp, camera_transform, attach_to=vehicle_actor, attachment_type=carla.AttachmentType.Rigid
-        )
-
-        if False:
-            time.sleep(1)
-            camera_abs_transform = rgb_camera_actor.get_transform()
-            rgb_camera_actor: types.carla.Actor = world.spawn_actor(camera_bp, camera_abs_transform)
-            vehicle_actor.destroy()
-            time.sleep(1)
-        actor_list.append(rgb_camera_actor)
-
-        save_name = f"image~{x}_{y}_{z}_{fov}"
-        save_dir = "data/samples"
-        os.makedirs(save_dir, exist_ok=True)
-        with open(f'{save_dir}/{save_name}.json', 'w') as f_label:
-            json.dump(
-                {
-                    "name": save_name,
-                    "map": world_map,
-                    "vehicle":
-                        {
-                            "location":
-                                {
-                                    "x": vehicle_transform.location.x,
-                                    "y": vehicle_transform.location.y,
-                                    "z": vehicle_transform.location.z,
-                                },
-                            "rotation":
-                                {
-                                    "pitch": vehicle_transform.rotation.pitch,
-                                    "yaw": vehicle_transform.rotation.yaw,
-                                    "roll": vehicle_transform.rotation.roll,
-                                }
-                        },
-                    "camera":
-                        {
-                            "location":
-                                {
-                                    "x": camera_transform.location.x,
-                                    "y": camera_transform.location.y,
-                                    "z": camera_transform.location.z,
-                                },
-                            "rotation":
-                                {
-                                    "pitch": camera_transform.rotation.pitch,
-                                    "yaw": camera_transform.rotation.yaw,
-                                    "roll": camera_transform.rotation.roll,
-                                },
-                            "fov": fov
-                        },
-                },
-                f_label,
-                indent=4,
-                ensure_ascii=False
+            pitch, yaw, roll = get_rotation_by_center_actor(x, y, z)
+            camera_transform: types.carla.Transform = carla.Transform(
+                location=carla.Location(x, y, z), rotation=carla.Rotation(pitch, yaw, roll)
             )
-        rgb_camera_actor.listen(lambda image: save_img(image, [800, 800], f"{save_dir}/{save_name}.png"))
 
-        time.sleep(1.2)
-        rgb_camera_actor.stop()
+            rgb_camera_actor: types.carla.Actor = world.spawn_actor(
+                camera_bp, camera_transform, attach_to=vehicle_actor, attachment_type=carla.AttachmentType.Rigid
+            )
+
+            if False:
+                time.sleep(1)
+                camera_abs_transform = rgb_camera_actor.get_transform()
+                rgb_camera_actor: types.carla.Actor = world.spawn_actor(camera_bp, camera_abs_transform)
+                vehicle_actor.destroy()
+                time.sleep(1)
+            actor_list.append(rgb_camera_actor)
+
+            save_name = get_save_name(x, y, z, fov)
+            with open(f'{labels_save_dir}/{save_name}.json', 'w') as f_label:
+                json.dump(
+                    {
+                        "name": save_name,
+                        "map": world_map,
+                        "vehicle":
+                            {
+                                "location":
+                                    {
+                                        "x": vehicle_transform.location.x,
+                                        "y": vehicle_transform.location.y,
+                                        "z": vehicle_transform.location.z,
+                                    },
+                                "rotation":
+                                    {
+                                        "pitch": vehicle_transform.rotation.pitch,
+                                        "yaw": vehicle_transform.rotation.yaw,
+                                        "roll": vehicle_transform.rotation.roll,
+                                    }
+                            },
+                        "camera":
+                            {
+                                "location":
+                                    {
+                                        "x": camera_transform.location.x,
+                                        "y": camera_transform.location.y,
+                                        "z": camera_transform.location.z,
+                                    },
+                                "rotation":
+                                    {
+                                        "pitch": camera_transform.rotation.pitch,
+                                        "yaw": camera_transform.rotation.yaw,
+                                        "roll": camera_transform.rotation.roll,
+                                    },
+                                "fov": fov
+                            },
+                    },
+                    f_label,
+                    indent=4,
+                    ensure_ascii=False
+                )
+            rgb_camera_actor.listen(lambda image: save_img(image, [800, 800], f"{images_save_dir}/{save_name}.png"))
+
+            time.sleep(1.2)
+            rgb_camera_actor.stop()
 
     except RuntimeError as e:
         print(CStr.red, '[RuntimeError]', CStr.reset, f'in Map:{world_map}', e)

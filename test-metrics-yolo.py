@@ -23,13 +23,13 @@ from mmdet.apis import init_detector, inference_detector
 cstr = lambda s: f"\033[01;32m{s}\033[0m"
 logt = lambda: "\033[01;32m{%d}\033[0m" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-model_list = ["yolo", "frcnn"]
+model_list = ["yolo", "frcnn","yolox","retinanet","ssd"]
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default="tmp/test/Town01-dog_kite_skateboard-0602_0945")
-    parser.add_argument('--model', type=str, default=model_list[0], choices=model_list)
+    parser.add_argument('--data_dir', type=str, default="temps/render-person/Town05-0722_0959-person")
+    parser.add_argument('--model', type=str, default="yolo", choices=model_list)
     parser.add_argument('--device', type=str, default="cuda:1")
     args = parser.parse_args()
 
@@ -64,11 +64,22 @@ def main():
         'pretrained/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth',
         device=device
     )
-    # faster_rcnn = init_detector(# YOLOX
-    #     'libs/mmdetection/configs/yolox/yolox_tiny_8xb8-300e_coco.py',
-    #     'pretrained/yolox_tiny_8x8_300e_coco_20211124_171234-b4047906.pth',
+    # yolox_model = init_detector(# YOLOX
+    #     'libs/mmdetection/configs/yolox/yolox_l_8xb8-300e_coco.py',
+    #     'pretrained/yolox_l_8x8_300e_coco_20211126_140236-d3bd2b23.pth',
     #     device=device
     # )
+    yolox_model = init_detector(# YOLOX
+        'libs/mmdetection/configs/yolox/yolox_s_8xb8-300e_coco.py',
+        'pretrained/yolox_s_8x8_300e_coco_20211121_095711-4592a793.pth',
+        device=device
+    )
+    retinanet_model = init_detector(# RetinaNet
+        'libs/mmdetection/configs/retinanet/retinanet_r50_fpn_1x_coco.py',
+        "pretrained/retinanet_r50_fpn_1x_coco_20200130-c2398f9e.pth",device=device)
+    ssd_model = init_detector(# SSD
+        "libs/mmdetection/configs/ssd/ssd512_coco.py",
+        "pretrained/ssd512_coco_20210803_022849-0a47a1ca.pth",device=device)
 
     car_idx = CarlaDataset.coco_ci_map['car']
 
@@ -84,10 +95,11 @@ def main():
                 carla_label_list.append(label)
 
     pbar = tqdm.tqdm(carla_label_list)
+    print(data_dir)
     reuslt_list = []
     attack_names = []
     save_dir = f"{data_dir}-{args.model}"
-    os.makedirs(save_dir, exist_ok=True)
+    
     for i_d, label in enumerate(pbar):
         [x1, y1, x2, y2] = label['bbox']
         w, h = label['size']
@@ -109,15 +121,25 @@ def main():
                 with torch.no_grad():
                     eval_pred, train_preds = detector.forward(image) # real
                     pred_results = non_max_suppression(eval_pred, conf_thres, iou_thres, None, False)[0]
-            elif args.model == "frcnn":
-                result = inference_detector(faster_rcnn, img)
+            elif args.model in [m for m in model_list if m != "yolo"]:
+                if args.model == "frcnn":
+                    model= faster_rcnn
+                elif args.model == "yolox":
+                    model = yolox_model
+                elif args.model == "retinanet":
+                    model = retinanet_model
+                elif args.model == "ssd":
+                    model = ssd_model
+                else:
+                    raise KeyError
+                result = inference_detector(model, img)
                 pred_results = []
                 for [x1, y1, x2, y2], conf, cls in zip(
                     (result.pred_instances.bboxes).cpu().numpy(),
                     (result.pred_instances.scores).cpu().numpy(),
                     (result.pred_instances.labels).cpu().numpy(),
                 ):
-                    if conf > 0.5:
+                    if conf > 0.6:
                         pred_results.append([int(x1), int(y1), int(x2), int(y2), conf, cls])
             else:
                 raise NotImplementedError
@@ -131,8 +153,6 @@ def main():
                 pbox = [x1, y1, x2, y2]
                 pconf = float(pred[4])
                 pcls = int(pred[5])
-                pcls_text = f"{CarlaDataset.coco_ic_map[pcls]}:{pconf:.2f}"
-
                 iou = box_iou(torch.tensor([pbox]), torch.tensor([tbox]))[0].item()
                 # print(si, [pbox, pconf, pcls],iou)
                 color = (0, 0, 0)
@@ -141,25 +161,58 @@ def main():
                     is_detected = True
                 if iou > 0.5:
                     if pcls == car_idx: #
-                        color = (0, 255, 0)
+                        # color = (0, 255, 0)
+                        color = CarlaDataset.color_map[CarlaDataset.coco_ic_map[pcls]]
                     else:
-                        color = (0, 0, 255)
-                    enhance_info.append([[x1, y1, x2, y2], pcls_text, color])
+                        # color = (0, 0, 255)
+                        color = CarlaDataset.color_map[CarlaDataset.coco_ic_map[pcls]]
+
+                    enhance_info.append([[x1, y1, x2, y2], pconf, pcls, color])
                 else:
-                    color = (0, 0, 0)
-                    detect_info.append([[x1, y1, x2, y2], pcls_text, color])
+                    # color = (0, 0, 0)
+                    color = CarlaDataset.color_map[CarlaDataset.coco_ic_map[pcls]]
+                    detect_info.append([[x1, y1, x2, y2], pconf, pcls, color])
 
-            for [[x1, y1, x2, y2], pcls_text, color] in detect_info:
-                cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(img, pcls_text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            detect_result = []
+            img_labeled = img.copy()
+            for [[x1, y1, x2, y2], pconf, pcls, color] in detect_info:
+                pcls_text = f"{CarlaDataset.coco_ic_map[pcls]}:{pconf:.2f}"
+                detect_result.append(
+                    {
+                        "bbox": [x1, y1, x2, y2],
+                        "conf": pconf,
+                        "clsanme": CarlaDataset.coco_ic_map[pcls],
+                        "clsid": pcls,
+                        "color": color
+                    }
+                )
+                cv2.rectangle(img_labeled, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(img_labeled, pcls_text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
 
-            for [[x1, y1, x2, y2], pcls_text, color] in enhance_info:
-                cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(img, pcls_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            for [[x1, y1, x2, y2], pconf, pcls, color] in enhance_info:
+                pcls_text = f"{CarlaDataset.coco_ic_map[pcls]}:{pconf:.2f}"
+                detect_result.append(
+                    {
+                        "bbox": [x1, y1, x2, y2],
+                        "conf": pconf,
+                        "clsanme": CarlaDataset.coco_ic_map[pcls],
+                        "clsid": pcls,
+                        "color": color
+                    }
+                )
+                cv2.rectangle(img_labeled, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(img_labeled, pcls_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
 
-            cv2.imwrite(f"{save_dir}/{file}", img)
+            os.makedirs(save_dir, exist_ok=True)
+            file_base=os.path.splitext(file)[0]
+            cv2.imwrite(f"{save_dir}/{file_base}-labeled.jpg", img_labeled)
+            cv2.imwrite(f"{save_dir}/{file_base}.jpg", img)
+            with open(f"{save_dir}/{file_base}.json","w")as f:
+                json.dump(detect_result,f,indent=4)
+            
 
             correct[attack_name] = is_detected
+
 
         reuslt_list.append(correct)
         pbar.set_description(f"[{i_d}] {correct}")
@@ -176,7 +229,10 @@ def main():
         print(f"{k}: {v:.4f}%")
 
     with open(f"{data_dir}-{args.model}-result.json", "w") as f:
-        json.dump(ap_dict, f, indent=4)
+        json.dump({
+            "model": args.model,
+            "ap": ap_dict,
+        }, f, indent=4)
 
 
 def box_iou(box1, box2, eps=1e-7):
@@ -202,25 +258,3 @@ def box_iou(box1, box2, eps=1e-7):
 
 if __name__ == "__main__":
     main()
-"""
-{
-"name": "Town10HD-point_0000-distance_000-direction_1",
-"imgs": {
-    "clean": "Town10HD-point_0000-distance_000-direction_1-clean.png",
-    "noise": "Town10HD-point_0000-distance_000-direction_1-noise.png",
-    "pacg-dog": "Town10HD-point_0000-distance_000-direction_1-pacg-dog.png",
-    "DAS": "Town10HD-point_0000-distance_000-direction_1-DAS.png",
-    "FCA": "Town10HD-point_0000-distance_000-direction_1-FCA.png"
-},
-"bbox": [
-    0.28625,
-    0.38875,
-    0.65625,
-    0.605
-],
-"size": [
-    800,
-    800
-]
-}
-"""

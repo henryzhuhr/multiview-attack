@@ -21,9 +21,9 @@ import neural_renderer as nr
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--pretrained', type=str, default='tmp/train/train_std-dog-05291142/checkpoint/_generator.pt')
-    parser.add_argument('--scence_image', type=str, default="images/carla-scene.png")
-    parser.add_argument('--scence_label', type=str, default="images/carla-scene.json")
+    parser.add_argument('--pretrained', type=str, default='tmp/train/physicalAttak-dog-06211610/checkpoint/_generator.pt')
+    parser.add_argument('--scence_name', type=str, default="data/samples/image~0_0_4_90")
+
     parser.add_argument('--device', type=str, default='cuda:0')
     return parser.parse_args()
 
@@ -33,8 +33,7 @@ class TypeArgs(metaclass=abc.ABCMeta):
     obj_model: str
     selected_faces: str
     texture_size: int
-    scence_image: str
-    scence_label: str
+    scence_name: str
 
 
 def main():
@@ -49,8 +48,8 @@ def main():
     latent_dim = pargs["latent_dim"]
     mix_prob = pargs["mix_prob"]
 
-    image = cv2.imread(args.scence_image)
-    with open(args.scence_label, 'r') as f:
+    image = cv2.imread(args.scence_name+".png")
+    with open(args.scence_name+".json", 'r') as f:
         label_dict = json.load(f)
         vehicle_transform = CarlaDataset.convert_dict_transform(label_dict['vehicle'])
         camera_transform = CarlaDataset.convert_dict_transform(label_dict['camera'])
@@ -61,7 +60,7 @@ def main():
     with open(pargs["selected_faces"], "r") as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     neural_renderer = NeuralRenderer(
-        obj_model, selected_faces=selected_faces, texture_size=ts, image_size=800, device=device
+        obj_model, selected_faces=selected_faces, texture_size=ts, image_size=800,batch_size=8, device=device
     )
     neural_renderer.set_render_perspective(camera_transform, vehicle_transform, fov)
 
@@ -91,19 +90,20 @@ def main():
     # tt_adv = torch.tanh(tt_adv)
     save_textures = tt_adv
     print(save_textures.shape)
-    torch.save(save_textures, "images/audi-adv.pt")
-    nr.save_obj(
-        "images/audi-adv.obj",
-        neural_renderer.vertices.squeeze(0),
-        neural_renderer.faces.squeeze(0),
-        save_textures,
-    )
+    # torch.save(save_textures, "images/audi-adv.pt")
+    # nr.save_obj(
+    #     "images/audi-adv.obj",
+    #     neural_renderer.vertices.squeeze(0),
+    #     neural_renderer.faces.squeeze(0),
+    #     save_textures,
+    # )
 
 
 def render_a_image(neural_renderer: NeuralRenderer, image: cv2.Mat, x: Tensor):
     # x_full = torch.zeros_like(neural_renderer.textures)
     x_full = neural_renderer.textures
     x_full[:, neural_renderer.selected_faces, :] = x
+
 
     rgb_images, _, alpha_images = neural_renderer.renderer.forward(
         neural_renderer.vertices, neural_renderer.faces, torch.tanh(x_full)

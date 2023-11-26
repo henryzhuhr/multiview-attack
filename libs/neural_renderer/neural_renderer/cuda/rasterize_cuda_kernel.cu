@@ -26,7 +26,7 @@ static __inline__ __device__ double atomicAdd(double* address, double val) {
 
 namespace{
 template <typename scalar_t>
-__global__ void forward_face_index_map_cuda_kernel_1(
+__global__ void 21.(
         const scalar_t* __restrict__ faces,
         scalar_t* __restrict__ faces_inv,
         int batch_size,

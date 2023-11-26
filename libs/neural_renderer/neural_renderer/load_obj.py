@@ -29,7 +29,7 @@ def load_mtl(filename_mtl):
     return colors, texture_filenames
 
 
-def load_textures(filename_obj, filename_mtl, texture_size, texture_wrapping='REPEAT', use_bilinear=True):
+def load_textures(filename_obj, filename_mtl, texture_size, texture_wrapping='MIRRORED_REPEAT', use_bilinear=True):
     # load vertices
     vertices = []
     with open(filename_obj) as f:

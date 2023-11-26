@@ -36,11 +36,12 @@ class TypeArgs(metaclass=abc.ABCMeta):
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_model', type=str, default='assets/audi.obj')
-    parser.add_argument('--data_dir', type=str, default="data/eval")
-    parser.add_argument('--world_map', type=str, default="Town01")
+    parser.add_argument('--data_dir', type=str, default="data/train")
+    parser.add_argument('--world_map', type=str, default="Town05")
     parser.add_argument('--texture_size', type=int, default=4)
     parser.add_argument('--device', type=str, default='cuda:0')
-    parser.add_argument('--pretrained', type=str, default="tmp/train/train_std-kite-05300053/checkpoint/_generator.pt")
+    # parser.add_argument('--pretrained', type=str, default="tmp/train/physicalAttak-dog-06211610/checkpoint/_generator.pt")
+    parser.add_argument('--pretrained', type=str, default="tmp/train/physicalAttak-kite-06212302/checkpoint/_generator.pt")
     parser.add_argument('--name', type=str)
     parser.add_argument('--nowt', type=str)
     return parser.parse_args()
@@ -54,10 +55,12 @@ def main():
         nowt = args.nowt
     else:
         nowt = datetime.datetime.now().strftime("%m%d_%H%M")
+    
+    base_name=f"temps/render-{args.name}/{args.world_map}-{nowt}"
     if args.name:
-        os.makedirs(save_dir := f"tmp/test/{args.world_map}-{nowt}-{args.name}", exist_ok=True)
+        os.makedirs(save_dir := f"{base_name}-{args.name}", exist_ok=True)
     else:
-        os.makedirs(save_dir := f"tmp/test/{args.world_map}-{nowt}", exist_ok=True)
+        os.makedirs(save_dir := f"{base_name}", exist_ok=True)
 
     pretrained = torch.load(args.pretrained, map_location='cpu')
     pargs = vars(pretrained["args"]) # pretrained args
@@ -77,7 +80,7 @@ def main():
         image_size=800,
         device=device,
     )
-    n_r = 0.1                                                                      # noise ratio
+    n_r = 0.05                                                                     # noise ratio
     x_t = (neural_renderer.textures[:, neural_renderer.selected_faces, :]).clone() # x_{texture}
     x_n = torch.rand_like(x_t)
     x_i = (1 - n_r) * x_t + n_r * x_n                                              # x_{texture with noise}
@@ -95,8 +98,8 @@ def main():
 
 
     # --- DAS ---    
-    # with open("assets/DAS-faces.txt", 'r') as f:
-    with open(pargs["selected_faces"], 'r') as f:
+    with open("assets/DAS-faces.txt", 'r') as f:
+    # with open(pargs["selected_faces"], 'r') as f:
         selected_faces = [int(face_id) for face_id in f.read().strip().split('\n')]
     nr_DAS = NeuralRenderer(
         obj_model,
@@ -154,13 +157,13 @@ def main():
             imgs_list["clean"] = render_img
             _, _, _, render_img = render_a_image(neural_renderer, x_n, image.clone(), r_p)
             imgs_list["noise"] = render_img
-        if "PACG":
+        if "mcc":
             for cat in cats:
                 label = torch.tensor(data_set.coco_ci_map[cat]).unsqueeze(0).to(device)
                 with torch.no_grad():
                     x_adv = model.decode(model.forward(x_i, label)) # x_{adv}
                 _, _, _, render_img = render_a_image(neural_renderer, x_adv, image.clone(), r_p)
-                imgs_list[f"pacg-{cat}"] = render_img
+                imgs_list[f"mcc-{cat}"] = render_img
         if "DAS":
             t_DAS=nr_DAS.textures * (1 - DAS_texture_mask) + DAS_texture_mask * 0.5 * (torch.tanh(texture_DAS) + 1)
             nr_DAS.set_render_perspective(r_p["ct"], r_p["vt"], r_p["fov"])
@@ -170,6 +173,7 @@ def main():
             imgs_list["DAS"] = render_img
         if "FCA":
             t_FCA=nr_FCA.textures * (1 - FCA_texture_mask) + FCA_texture_mask * 0.5 * (torch.tanh(texture_FCA) + 1)
+
             nr_FCA.set_render_perspective(r_p["ct"], r_p["vt"], r_p["fov"])
             rgb_image, _, alpha_image = nr_FCA.forward(t_FCA)
             render_image = alpha_image * rgb_image + (1 - alpha_image) * image

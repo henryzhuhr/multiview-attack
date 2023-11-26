@@ -1,7 +1,8 @@
+import os
 import random
 from typing import List
 
-import os
+
 import sys
 import shutil
 import time
@@ -17,11 +18,12 @@ from models.data import types
 
 tm_port = 8000
 
+
 save_scene = False # 是否保存场景图
 
 
 class Args:
-    world_map = "Town01"
+    world_map = "Town05"
     data_root = f"data/train"
 
     class Dirs:
@@ -64,7 +66,7 @@ def main():
         blueprint_library = world.get_blueprint_library()
         vehicle_bps = blueprint_library.filter('vehicle')
         filter_out = [
-                       # 'vehicle.tesla.model3',
+            'vehicle.tesla.model3',
         ]
         vehicle_bps = [x for x in vehicle_bps if (x.id not in filter_out)]
         vehicle_bps = vehicle_bps + vehicle_bps + vehicle_bps
@@ -124,9 +126,9 @@ def main():
                 attachment_type=carla.AttachmentType.Rigid,
             )
 
-            # if not save_scene:
-            #     vehicle_actor.destroy()
-            #     time.sleep(2)
+            if not save_scene:
+                vehicle_actor.destroy()
+                time.sleep(2)
 
             time.sleep(2)
             camera_actor.listen(lambda image: save_img(image, Settings.image_size, save_file_path))

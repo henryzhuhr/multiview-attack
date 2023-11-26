@@ -8,11 +8,11 @@ echo -e "\n\033[01;36m[ENV]$(which python) \033[0m\n"
 python train-autoencoder.py \
     --obj_model assets/audi.obj \
     --latent_dim 1024 \
-    --selected_faces assets/FCA-faces.txt \
-    --save_name ae-audi-full
+    --selected_faces assets/faces-audi-std.txt \
+    --save_name ae_b-audi-std
 
 # "audi" 
-for model_name in "vehicle"
+for model_name in "audi"
 do
     for type in "less" "std" "full"
     do
